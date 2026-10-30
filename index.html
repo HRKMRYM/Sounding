@@ -1,0 +1,2386 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-title" content="Sounding">
+<title>Route Sounding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Semi+Condensed:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --paper:#ffffff;
+  --shell:#dfe5e8;
+  --panel:#eef2f4;
+  --ink:#0e1417;
+  --ink2:#5d6a71;
+  --ink3:#8c979d;
+  --rule:#bdc8ce;
+  --route:#a81c64;
+  --amber:#a35f00;
+  --ice:#0b6e9c;
+  --temp:#cf1b20;
+  --dewp:#1a7a3d;
+  --ok:#1a7a3d;
+  --sans:"Barlow Semi Condensed",-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;background:var(--shell);color:var(--ink);
+  font-family:var(--sans);font-size:15px;line-height:1.45;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:18px 16px 60px}
+
+/* ---------- header ---------- */
+header{
+  display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+  border-bottom:2px solid var(--ink);padding-bottom:8px;margin-bottom:16px;
+}
+h1{
+  font-size:27px;font-weight:700;letter-spacing:.055em;
+  text-transform:uppercase;margin:0;
+}
+.sub{font-family:var(--mono);font-size:11.5px;color:var(--ink2);letter-spacing:.02em}
+.spacer{flex:1}
+.hstat{font-family:var(--mono);font-size:11.5px;color:var(--ink2)}
+
+/* ---------- drop zone ---------- */
+#drop{
+  background:var(--paper);border:2px dashed var(--rule);border-radius:3px;
+  padding:30px 22px;text-align:center;transition:border-color .15s,background .15s;
+  cursor:pointer;
+}
+#drop.hot{border-color:var(--route);background:#fdf4f8}
+#drop h2{
+  margin:0 0 4px;font-size:19px;font-weight:600;letter-spacing:.035em;
+  text-transform:uppercase;
+}
+#drop p{margin:0;color:var(--ink2);font-size:14px}
+#drop .keys{
+  font-family:var(--mono);font-size:11px;color:var(--ink3);
+  margin-top:12px;letter-spacing:.02em;
+}
+kbd{
+  font-family:var(--mono);font-size:10.5px;background:var(--panel);
+  border:1px solid var(--rule);border-bottom-width:2px;border-radius:2px;
+  padding:1px 5px;color:var(--ink2);
+}
+#file{display:none}
+
+/* ---------- generic panel ---------- */
+.panel{
+  background:var(--paper);border:1px solid var(--rule);border-radius:3px;
+  margin-top:14px;overflow:hidden;
+}
+.phead{
+  display:flex;align-items:center;gap:10px;
+  padding:6px 11px;border-bottom:1px solid var(--rule);background:var(--panel);
+}
+.phead h3{
+  margin:0;font-size:12.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink2);
+}
+.phead .n{font-family:var(--mono);font-size:11px;color:var(--ink3)}
+
+/* ---------- buttons ---------- */
+button{
+  font-family:var(--sans);font-size:13.5px;font-weight:600;letter-spacing:.05em;
+  text-transform:uppercase;border:1px solid var(--ink);background:var(--ink);
+  color:#fff;padding:6px 15px;border-radius:2px;cursor:pointer;
+}
+button:hover{background:#000}
+button.ghost{background:transparent;color:var(--ink)}
+button.ghost:hover{background:var(--panel)}
+button:disabled{opacity:.4;cursor:default}
+button:focus-visible,#drop:focus-visible,td[contenteditable]:focus{
+  outline:2px solid var(--route);outline-offset:1px;
+}
+
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px}
+th{
+  text-align:left;font-family:var(--sans);font-size:11px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase;color:var(--ink2);
+  padding:5px 9px;border-bottom:1px solid var(--rule);white-space:nowrap;
+}
+td{padding:4px 9px;border-bottom:1px solid #eef1f3;white-space:nowrap}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:#f6f9fa}
+tbody tr.sel{background:#fdf0f5;box-shadow:inset 3px 0 0 var(--route)}
+td[contenteditable]{outline-offset:-2px}
+td.num{text-align:right}
+.flag{
+  display:inline-block;font-family:var(--sans);font-size:10px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;padding:0 5px;border-radius:2px;
+  background:#fdf0dd;color:var(--amber);border:1px solid #e8c894;
+}
+.raw{color:var(--ink3)}
+
+/* ---------- layout ---------- */
+.cols{display:grid;grid-template-columns:1fr 300px;gap:14px;align-items:start}
+@media(max-width:860px){.cols{grid-template-columns:1fr}}
+
+/* ---------- readout ---------- */
+.readout{font-family:var(--mono);font-size:12px;padding:10px 12px}
+.readout .grp{margin-bottom:11px}
+.readout .grp:last-child{margin-bottom:0}
+.readout .lbl{
+  font-family:var(--sans);font-size:10.5px;font-weight:600;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink3);margin-bottom:2px;
+}
+.readout .row{display:flex;justify-content:space-between;gap:10px}
+.readout .row b{font-weight:500}
+.readout .v{color:var(--ink)}
+.warn{color:var(--amber)}
+
+.offs{display:flex;gap:3px;flex-wrap:wrap}
+.offs button{
+  font-size:11.5px;padding:3px 9px;letter-spacing:.04em;
+  background:transparent;color:var(--ink2);border-color:var(--rule);
+}
+.offs button:hover{background:var(--paper);color:var(--ink)}
+.offs button.on{background:var(--route);border-color:var(--route);color:#fff}
+.legend{display:flex;gap:12px;flex-wrap:wrap;padding:7px 12px;
+  border-top:1px solid var(--rule);font-family:var(--mono);font-size:11px;color:var(--ink2)}
+.legend i{display:inline-block;width:16px;height:0;border-top-width:2.4px;
+  border-top-style:solid;vertical-align:middle;margin-right:5px}
+svg{display:block;width:100%;height:auto}
+.msg{
+  font-family:var(--mono);font-size:12.5px;padding:10px 12px;
+  border-left:3px solid var(--amber);background:#fdf8f0;color:var(--ink2);
+  margin-top:14px;border-radius:2px;
+}
+.msg.err{border-color:var(--temp);background:#fdf1f1}
+.hide{display:none}
+.foot{
+  margin-top:22px;font-family:var(--mono);font-size:11px;color:var(--ink3);
+  border-top:1px solid var(--rule);padding-top:9px;line-height:1.7;
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+/* ---------- touch ---------- */
+@media(pointer:coarse){
+  button{min-height:42px;padding:8px 16px;font-size:14.5px}
+  .offs button{min-height:38px;padding:6px 13px;font-size:13px}
+  td{padding:11px 10px;font-size:14px}
+  th{padding:9px 10px}
+  #drop{padding:38px 20px}
+  textarea,input[type=password]{font-size:16px}   /* stops iOS auto-zoom */
+  td[contenteditable]{background:#fbfcfd;border-radius:2px}
+}
+/* keep dense graphics legible on a narrow screen: pan instead of shrink */
+.scrollx{overflow-x:auto;-webkit-overflow-scrolling:touch}
+@media(max-width:900px){
+  .wrap{padding:12px 10px 50px}
+  h1{font-size:22px}
+  .scrollx>*{min-width:840px}
+  .cols{grid-template-columns:1fr}
+}
+
+/* ---------- print / save as PDF ---------- */
+#printArea{display:none}
+@media print{
+  @page{margin:11mm}
+  body{background:#fff}
+  .wrap>header,#drop,#keyPanel,#textPanel,#msg,#modelPanel,
+  #wpPanel,#ribPanel,#soundCols,.foot,#clear{display:none!important}
+  #printArea{display:block}
+  .pgroup{page-break-after:always;break-after:page}
+  .pgroup:last-child{page-break-after:auto;break-after:auto}
+  .phead{background:#fff}
+}
+#printArea .pgroup{margin-bottom:24px}
+#printArea .ptitle{
+  font-size:16px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  border-bottom:1.5px solid var(--ink);padding-bottom:4px;margin-bottom:8px;
+}
+#printArea .psub{font-family:var(--mono);font-size:11px;color:var(--ink2);margin-bottom:8px}
+#printArea .pcols{display:grid;grid-template-columns:1fr 250px;gap:14px;align-items:start}
+</style>
+
+<div class="wrap">
+<header>
+  <h1>Route Sounding</h1>
+  <span class="sub">WAYPOINT SCREENSHOT &rarr; SKEW-T</span>
+  <span class="spacer"></span>
+  <button class="ghost" id="clear">Clear</button>
+  <span class="hstat" id="hstat">READY</span>
+</header>
+
+<div id="drop" tabindex="0" role="button" aria-label="Load a waypoint screenshot">
+  <h2>Drop a flight plan</h2>
+  <p>Flight-plan PDF (the NAVLOG is found and read on this device), or a screenshot of the legs page.<br>
+     Screenshots: use <b>Transcribe an image</b> below if you have no key.</p>
+  <div class="keys">DRAG &middot; CLICK &middot; <kbd>Ctrl</kbd>+<kbd>V</kbd></div>
+  <input type="file" id="file" accept="image/*,application/pdf">
+</div>
+
+<div class="panel" id="keyPanel">
+  <div class="phead">
+    <h3>API key</h3>
+    <span class="n">only needed when this page runs outside the chat window</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="keyToggle">Show</button>
+  </div>
+  <div id="keyBody" class="hide" style="padding:11px">
+    <p style="margin:0 0 8px;font-size:13.5px;color:var(--ink2)">
+      Inside the chat window, screenshot reading works with no key. Saved to this
+      tab only &mdash; it is forgotten when you close the page.</p>
+    <input type="password" id="apiKey" spellcheck="false" placeholder="sk-ant-…"
+      style="width:100%;font-family:var(--mono);font-size:12.5px;padding:7px;
+             border:1px solid var(--rule);border-radius:2px">
+  </div>
+</div>
+
+<div class="panel" id="textPanel">
+  <div class="phead">
+    <h3>Or paste the text</h3>
+    <span class="n">no reading step &mdash; works offline</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="textToggle">Show</button>
+  </div>
+  <div id="textBody" class="hide" style="padding:11px">
+    <p style="margin:0 0 8px;font-size:13.5px;color:var(--ink2)">
+      If you can select the text in the flight plan, paste it here. Identifiers
+      and coordinates can be on the same line or on separate lines.</p>
+    <textarea id="textIn" rows="7" spellcheck="false" placeholder="N24427E125058
+GAHRA
+N24466E125176
+MJC"
+      style="width:100%;font-family:var(--mono);font-size:12.5px;padding:8px;
+             border:1px solid var(--rule);border-radius:2px;resize:vertical"></textarea>
+    <div style="margin-top:8px;display:flex;gap:7px;align-items:center;flex-wrap:wrap">
+      <button id="textRun">Read text</button>
+      <button class="ghost" id="ocrBtn">Transcribe an image</button>
+      <span id="ocrStat" style="font-family:var(--mono);font-size:11.5px;color:var(--ink3)"></span>
+    </div>
+    <input type="file" id="ocrFile" accept="image/*" style="display:none">
+  </div>
+</div>
+
+<div id="msg" class="msg hide"></div>
+
+<!-- waypoints -->
+<div class="panel" id="modelPanel">
+  <div class="phead">
+    <h3>Models</h3>
+    <span class="n" id="modNote">first one drives the readout &middot; others overlay</span>
+    <span class="spacer"></span>
+    <div class="offs" id="mods"></div>
+  </div>
+</div>
+
+<div class="panel hide" id="wpPanel">
+  <div class="phead">
+    <h3>Waypoints</h3>
+    <span class="n" id="wpCount"></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="addRow">Add row</button>
+    <label class="n" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer">
+      <input type="checkbox" id="useNb" checked> 2D CAT (+4 grid points / waypoint)</label>
+    <button id="run">Get soundings</button>
+  </div>
+  <div id="navBar" class="hide" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;
+       padding:7px 11px;border-bottom:1px solid var(--rule);font-family:var(--mono);font-size:11.5px;color:var(--ink2)">
+    <b id="navInfo" style="color:var(--ink)"></b>
+    <label>Min spacing (nm) <input id="navSpace" type="number" min="0" step="10" value="40"
+      style="font-family:var(--mono);font-size:12px;padding:3px 5px;width:62px;border:1px solid var(--rule);border-radius:2px"></label>
+    <span class="n">0 = every fix</span>
+  </div>
+  <div style="overflow-x:auto">
+  <table id="wpTable">
+    <thead><tr>
+      <th>#</th><th>Name</th><th>As printed</th>
+      <th class="num">Lat</th><th class="num">Lon</th>
+      <th></th>
+    </tr></thead>
+    <tbody></tbody>
+  </table>
+  </div>
+</div>
+
+<!-- route ribbon -->
+<div class="panel hide" id="ribPanel">
+  <div class="phead">
+    <h3>Route profile</h3>
+    <span class="n" id="ribNote">icing band 0 to &minus;20&deg;C &middot; tropopause &middot; strongest wind below FL450</span>
+    <span class="spacer"></span>
+    <button class="ghost" id="printBtn">Save as PDF</button>
+    <div class="offs" id="offs"></div>
+  </div>
+  <div class="phead" style="border-top:1px solid #eef1f3">
+    <h3 style="font-size:11px">Layers</h3>
+    <div class="offs" id="layers"></div>
+    <span class="spacer"></span>
+    <span class="n">CAT / Ri / front / 2PVU are derived from model fields, not forecast products &mdash; CAT is a relative index</span>
+  </div>
+  <div class="scrollx"><div id="ribbon"></div></div>
+  <div class="legend" id="ribLegend"></div>
+</div>
+
+<!-- sounding -->
+<div class="cols hide" id="soundCols">
+  <div class="panel" style="margin-top:0">
+    <div class="phead"><h3 id="stTitle">Sounding</h3><span class="n" id="stSub"></span></div>
+    <div class="scrollx"><div id="skewt"></div></div>
+    <div class="legend" id="legend"></div>
+  </div>
+  <div class="panel" style="margin-top:0">
+    <div class="phead"><h3>Readout</h3></div>
+    <div class="readout" id="readout"></div>
+  </div>
+</div>
+
+<div id="printArea"></div>
+
+<div class="foot">
+  Model data: Open-Meteo (GFS 0.25&deg;, 19 pressure levels). Not a meteorological
+  authority &mdash; for personal study only, never for operational decisions.<br>
+  Coordinates are transcribed by Claude and converted in-page; rows marked
+  <span class="flag">check</span> disagreed and need your eye. All fields are editable.
+</div>
+</div>
+
+<script>
+/* =====================================================================
+   1. coordinate parsing  (transcription is Claude's job, maths is ours)
+   ===================================================================== */
+const HEMI={N:1,S:-1,E:1,W:-1};
+
+function dmToDeg(d,m,s,h){return (Math.abs(+d)+(+m||0)/60+(+s||0)/3600)*HEMI[h];}
+
+function parseCoord(txt){
+  let t=String(txt).trim().toUpperCase().replace(/[′’]/g,"'").replace(/[″”]/g,'"');
+  let m;
+  // D M S with separators
+  m=t.match(/^([NSEW])?\s*(\d{1,3})\s*[°D:\s]\s*(\d{1,2})\s*['M:\s]\s*(\d{1,2}(?:\.\d+)?)\s*["S]?\s*([NSEW])?$/);
+  if(m){const h=m[1]||m[5];if(!h)throw 0;return dmToDeg(m[2],m[3],m[4],h);}
+  // D M
+  m=t.match(/^([NSEW])?\s*(\d{1,3})\s*[°D:\s]\s*(\d{1,2}(?:\.\d+)?)\s*['M]?\s*([NSEW])?$/);
+  if(m){const h=m[1]||m[4];if(!h)throw 0;return dmToDeg(m[2],m[3],0,h);}
+  // decimal
+  m=t.match(/^([NSEW])?\s*([-+])?(\d{1,3}\.\d+)\s*([NSEW])?$/);
+  if(m){const h=m[1]||m[4];const v=+m[3];return h?v*HEMI[h]:(m[2]==='-'?-v:v);}
+  // packed  N24427 / E125058 / N3533.6 / 1394642E
+  m=t.match(/^([NSEW])?\s*(\d{4,8}(?:\.\d+)?)\s*([NSEW])?$/);
+  if(m){
+    const h=m[1]||m[3];if(!h)throw 0;
+    // degrees are 2 digits for latitude, 3 for longitude — the letter decides
+    const nd=(h==="N"||h==="S")?2:3;
+    const num=m[2],ip=num.split('.')[0],fr=num.slice(ip.length);
+    if(ip.length<=nd)throw 0;
+    const d=ip.slice(0,nd),rest=ip.slice(nd);
+    if(rest.length===2)return dmToDeg(d,rest+fr,0,h);            // MM
+    if(rest.length===3)return dmToDeg(d,rest.slice(0,2)+"."+rest[2],0,h); // MMT
+    if(rest.length===4)return dmToDeg(d,rest.slice(0,2),rest.slice(2)+fr,h); // MMSS
+    if(rest.length===5)return dmToDeg(d,rest.slice(0,2),rest.slice(2,4)+"."+rest[4],h);
+    throw 0;
+  }
+  throw 0;
+}
+
+function parsePair(txt){
+  const t=String(txt).trim().toUpperCase();
+  let m=t.match(/^\s*([NS][^NSEW]+)\s*([EW][^NSEW]*)\s*$/);
+  if(m)return[parseCoord(m[1]),parseCoord(m[2])];
+  m=t.match(/^\s*([^NSEW]+[NS])\s*([^NSEW]+[EW])\s*$/);
+  if(m)return[parseCoord(m[1]),parseCoord(m[2])];
+  const p=t.split(/[,;/]|\s+/).filter(Boolean);
+  if(p.length===2)return[parseCoord(p[0]),parseCoord(p[1])];
+  if(p.length===4)return[parseCoord(p[0]+' '+p[1]),parseCoord(p[2]+' '+p[3])];
+  throw 0;
+}
+
+const nmBetween=(a,b)=>{
+  const R=Math.PI/180,[y1,x1,y2,x2]=[a[0]*R,a[1]*R,b[0]*R,b[1]*R];
+  const d=2*Math.asin(Math.sqrt(Math.sin((y2-y1)/2)**2+
+      Math.cos(y1)*Math.cos(y2)*Math.sin((x2-x1)/2)**2));
+  return d*180/Math.PI*60;
+};
+
+/* =====================================================================
+   2. thermodynamics
+   ===================================================================== */
+const Rd=287.05,CPD=1005,LV=2.501e6,EPS=0.622;
+const esat=Tc=>6.112*Math.exp(17.67*Tc/(Tc+243.5));           // hPa
+const wsat=(Tc,p)=>{const e=esat(Tc);return EPS*e/Math.max(p-e,1e-6);};
+const dewFromRH=(Tc,rh)=>{
+  const e=Math.max(esat(Tc)*Math.max(rh,0.5)/100,1e-6),l=Math.log(e/6.112);
+  return 243.5*l/(17.67-l);
+};
+// pseudoadiabatic dT/dp  [K/hPa]
+function moistDTdp(Tk,p){
+  const Tc=Tk-273.15,rs=wsat(Tc,p);
+  return (1/p)*(Rd*Tk+LV*rs)/(CPD+(LV*LV*rs*EPS)/(Rd*Tk*Tk));
+}
+function moistAdiabat(T0c,p0,pEnd,step){
+  const out=[];let Tk=T0c+273.15,p=p0;
+  const dir=pEnd<p0?-1:1,dp=dir*Math.abs(step);
+  out.push([p,Tk-273.15]);
+  while(dir<0?p>pEnd:p<pEnd){
+    Tk+=moistDTdp(Tk,p)*dp;p+=dp;
+    out.push([p,Tk-273.15]);
+  }
+  return out;
+}
+const dryAdiabat=(thetaK,p)=>thetaK*Math.pow(p/1000,0.2854)-273.15;
+function lclPressure(p,Tc,Tdc){                                  // Bolton
+  const T=Tc+273.15,Td=Tdc+273.15;
+  const Tl=1/(1/(Td-56)+Math.log(T/Td)/800)+56;
+  return p*Math.pow(Tl/T,1/0.2854);
+}
+const interpAt=(arr,tgt,fx,fy)=>{                                // first crossing
+  for(let i=0;i<arr.length-1;i++){
+    const a=fy(arr[i]),b=fy(arr[i+1]);
+    if((a-tgt)*(b-tgt)<=0&&a!==b){
+      const f=(a-tgt)/(a-b);
+      return fx(arr[i])+f*(fx(arr[i+1])-fx(arr[i]));
+    }
+  }
+  return null;
+};
+
+/* =====================================================================
+   3. state + DOM helpers
+   ===================================================================== */
+const LEVELS=[1000,975,950,925,900,850,800,700,600,500,400,300,250,200,150,100,70,50,30];
+const JET_MAX_FT=45000;   // ignore winds above FL450 when hunting the jet core
+const VARS=["temperature","relative_humidity","wind_speed","wind_direction","geopotential_height"];
+const OPT_VARS=["cloud_cover"];      // may be absent on some models — never required
+const CLOUD_MIN=45;                  // % cover counted as cloud
+const FRONT_MIN=3.0;   // degC/100nm: start showing. A textbook frontal zone is
+const FRONT_STRONG=8.0;// 4-5 degC/100km == roughly 8-9 degC/100nm, so only the
+                       // darkest shading is a front in the classical sense.
+const TURN_MIN=15;     // deg of directional change per 1000 ft worth flagging
+const HSHEAR_MIN=15;   // kt of horizontal wind change per 100 nm worth flagging
+/* ---- 2D CAT analysis (neighbouring grid points) -------------------------- */
+const G0=9.80665,OMEGA=7.2921e-5,KT=0.514444,NM=1852,R_E=6371000;
+const NB_D=0.5;                       // degrees N/S/E/W of each waypoint
+const NB_LEVELS=[850,800,700,600,500,400,300,250,200,150,100,70];
+const NB_VARS=["temperature","wind_speed","wind_direction"];
+/* Ellrod indices are expressed in 1e-7 s^-2. Published category thresholds
+   disagree between sources and depend on the model's resolution, so treat
+   these as ADJUSTABLE, and read the output as a relative index. */
+const TI_LGT=4,TI_MOD=8,TI_SEV=12;
+const RI_CRIT=0.25,RI_WARN=1.0;       // Richardson number
+const JET_AXIS_GRAD=3;                // kt/100nm: below this you are "on the axis"
+const PV_TROP=2;                      // PVU defining the dynamic tropopause
+/* Composite turbulence score per layer: 0 none, 1 light, 2 moderate, 3 severe.
+   Only a relative guide. Thresholds are the three break points of each factor. */
+const VWS_T=[6,9,12];                 // kt per 1000 ft
+const HS_T=[15,30,50];                // kt per 100 nm (wind deformation)
+const TURN_T=[15,30,45];              // deg per 1000 ft (direction change)
+let USE_NB=true;
+let T0=Date.now();                   // the one time every waypoint is read at (+ OFFSET)
+let PAST=2;                           // days of history requested; follows the flight date
+const $=s=>document.querySelector(s);
+const el=(t,a={},...k)=>{const n=document.createElementNS("http://www.w3.org/2000/svg",t);
+  for(const p in a)n.setAttribute(p,a[p]);k.forEach(c=>n.append(c));return n;};
+const MODELS=[
+  {id:"gfs",  label:"GFS", org:"NOAA",  col:"#cf1b20",
+   ids:["gfs_global","ncep_gfs_global","ncep_gfs_seamless","gfs_seamless"]},
+  {id:"icon", label:"ICON",org:"DWD",   col:"#7b3fa0",
+   ids:["icon_global","dwd_icon_global","dwd_icon","icon_seamless"]},
+  {id:"gsm",  label:"GSM", org:"JMA",   col:"#b06a00",
+   ids:["jma_gsm","jma_seamless"]},
+  {id:"ifs",  label:"IFS", org:"ECMWF", col:"#1a6fb0",
+   ids:["ecmwf_ifs025","ecmwf_ifs04"]}
+];
+let PICKED=["gfs"];
+let WPS=[],RAW=[],NB=[],PROF=[],SEL=0,OFFSET=0;
+const modelOf=id=>MODELS.find(m=>m.id===id);
+
+function status(t){$("#hstat").textContent=t;}
+function say(t,isErr){
+  const m=$("#msg");m.textContent=t;m.className="msg"+(isErr?" err":"");
+  if(!t)m.classList.add("hide");
+}
+
+/* ---- lenient UTC time entry ----------------------------------------
+   accepts  1500 · 15:00 · 4/1500 · 04 15:00 · 2026-08-04T15:00        */
+function normTime(v){
+  const s=String(v||"").trim();
+  if(!s)return "";
+  if(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(s))return s.slice(0,16);
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,"0");
+  let m;
+  // day + time
+  m=s.match(/^(\d{1,2})[\/\s.T-](\d{1,2}):?(\d{2})$/);
+  if(m){
+    const d=+m[1],hh=+m[2],mm=+m[3];
+    if(hh>23||mm>59||d<1||d>31)return "";
+    let y=now.getUTCFullYear(),mo=now.getUTCMonth();
+    if(d<now.getUTCDate()-15)mo++;              // rolled into next month
+    const dt=new Date(Date.UTC(y,mo,d,hh,mm));
+    return dt.toISOString().slice(0,16);
+  }
+  // time only -> today, or tomorrow if well past
+  m=s.match(/^(\d{1,2}):?(\d{2})$/);
+  if(m){
+    const hh=+m[1],mm=+m[2];
+    if(hh>23||mm>59)return "";
+    let dt=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),
+                             now.getUTCDate(),hh,mm));
+    if(dt.getTime()<now.getTime()-6*3600e3)dt=new Date(dt.getTime()+864e5);
+    return dt.toISOString().slice(0,16);
+  }
+  return "";
+}
+
+/* =====================================================================
+   4. read the screenshot
+   ===================================================================== */
+const PROMPT=`This image shows a list of flight-plan waypoints.
+
+Return a JSON array. One object per waypoint, in printed order:
+ "name"  identifier exactly as printed
+ "raw"   the latitude/longitude EXACTLY as printed, character for character.
+         Do not convert, reformat or normalise it. Keep hemisphere letters,
+         symbols and spacing.
+ "lat","lon"  your own decimal-degree conversion (S and W negative).
+         Used only as a cross-check against an independent parser.
+ "time"  ETA/ETO in UTC as "YYYY-MM-DDTHH:MM", or "HH:MM" if only a clock
+         time is shown, otherwise null.
+ "uncertain"  true only if a character was hard to read.
+
+Rows may be laid out over two lines, with the identifier printed directly
+above or below its coordinate, and separated from the next row by a rule.
+Pair each identifier with the coordinate in its own block.
+
+Skip rows with no coordinates. Output compact JSON only — no prose, no fences.`;
+
+async function readFile(file){
+  const b64=await new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>res(r.result.split(",")[1]);
+    r.onerror=()=>rej(new Error("File could not be read"));
+    r.readAsDataURL(file);
+  });
+  const isPdf=file.type==="application/pdf";
+  const block=isPdf
+    ?{type:"document",source:{type:"base64",media_type:"application/pdf",data:b64}}
+    :{type:"image",source:{type:"base64",media_type:file.type||"image/png",data:b64}};
+
+  const key=($("#apiKey")?.value||"").trim();
+  const headers={"Content-Type":"application/json"};
+  if(key){
+    headers["x-api-key"]=key;
+    headers["anthropic-version"]="2023-06-01";
+    headers["anthropic-dangerous-direct-browser-access"]="true";
+  }
+  const r=await fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",headers,
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,
+      messages:[{role:"user",content:[block,{type:"text",text:PROMPT}]}]})
+  });
+  if(!r.ok)throw new Error(r.status===401
+    ?"Reading needs an API key when this page runs outside the chat window — or use the paste-text box instead."
+    :"Reader returned "+r.status);
+  const d=await r.json();
+  let txt=(d.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("").trim();
+  txt=txt.replace(/^```(?:json)?/,"").replace(/```$/,"").trim();
+  const s=txt.indexOf("["),e=txt.lastIndexOf("]");
+  if(s<0||e<0)throw new Error("No waypoints found in that file");
+  return JSON.parse(txt.slice(s,e+1));
+}
+
+function ingest(rows){
+  WPS=[];let prev=null;
+  rows.forEach((r,i)=>{
+    const name=(r.name||("WP"+(i+1))).toString().trim();
+    const raw=(r.raw||"").toString().trim();
+    let lat,lon,flags=[];
+    try{[lat,lon]=parsePair(raw);}
+    catch{
+      if(r.lat==null||r.lon==null)return;
+      lat=+r.lat;lon=+r.lon;flags.push("parser");
+    }
+    if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180))return;
+    if(r.lat!=null&&r.lon!=null){
+      const d=nmBetween([lat,lon],[+r.lat,+r.lon]);
+      if(d>1)flags.push("check");
+    }
+    if(r.uncertain)flags.push("unclear");
+    if(prev&&nmBetween(prev,[lat,lon])>2000)flags.push("jump");
+    prev=[lat,lon];
+    let t=r.time||"";
+    if(/^\d{2}:\d{2}$/.test(t))t=new Date().toISOString().slice(0,10)+"T"+t;
+    WPS.push({name,raw,lat,lon,time:t,flags});
+  });
+  drawTable();
+}
+
+/* =====================================================================
+   5. waypoint table
+   ===================================================================== */
+function drawTable(){
+  const tb=$("#wpTable tbody");tb.innerHTML="";
+  WPS.forEach((w,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=
+      `<td class="num">${i+1}</td>`+
+      `<td contenteditable data-k="name">${w.name}</td>`+
+      `<td class="raw">${w.raw||"&mdash;"}</td>`+
+      `<td class="num" contenteditable data-k="lat">${w.lat.toFixed(4)}</td>`+
+      `<td class="num" contenteditable data-k="lon">${w.lon.toFixed(4)}</td>`+
+      `<td>${w.flags.map(f=>`<span class="flag">${f}</span>`).join(" ")}</td>`;
+    tr.onclick=e=>{if(e.target.isContentEditable)return;select(i);};
+    tr.querySelectorAll("[contenteditable]").forEach(td=>{
+      td.onblur=()=>{
+        const k=td.dataset.k,v=td.textContent.trim();
+        if(k==="lat"||k==="lon"){
+          const n=parseFloat(v);
+          if(isFinite(n))w[k]=n;else td.textContent=w[k].toFixed(4);
+        }else if(k==="time"){
+          w.time=normTime(v);
+          td.textContent=w.time?w.time.replace("T"," ")+"Z":"";
+          if(RAW.filter(Boolean).length)rerender(false);
+        }else w[k]=v;
+      };
+      td.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();td.blur();}};
+    });
+    tb.append(tr);
+  });
+  $("#wpCount").textContent=WPS.length+" points";
+  $("#wpPanel").classList.remove("hide");
+}
+
+/* =====================================================================
+   6. fetch soundings  (one request, all points)
+   ===================================================================== */
+/* Open-Meteo has renamed its model ids over time. Probe with a tiny request
+   so one stale name cannot 400 the whole fetch. Resolved once per session. */
+const RESOLVED={};
+/* A failed fetch() is a network-level error: offline, blocked by the viewer, or a
+   rate-limit reply without CORS headers (which the browser also reports this way). */
+const netErr=(stage,e)=>Object.assign(new Error("BLOCKED"),
+  {stage,detail:String((e&&e.message)||e)});
+/* Why did the weather request fail? Three probes tell the cases apart:
+   - a normal request            (needs CORS headers)
+   - the same with mode:no-cors  (succeeds whenever the server is reachable, even
+                                  if its reply lacks CORS headers, e.g. a rate-limit reply)
+   - a request to a different, always-up CDN (is there internet at all?) */
+async function netDiag(){
+  const probe=async(u,o)=>{
+    try{const ac=new AbortController(),to=setTimeout(()=>ac.abort(),6000);
+        await fetch(u,Object.assign({signal:ac.signal},o||{}));clearTimeout(to);return true;}
+    catch{return false;}
+  };
+  const U="https://api.open-meteo.com/v1/forecast?latitude=35&longitude=139&hourly=temperature_500hPa&forecast_days=1";
+  const [cors,reach,net]=await Promise.all([
+    probe(U),probe(U,{mode:"no-cors"}),
+    probe("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js",{mode:"no-cors",method:"HEAD"})]);
+  const where=location.protocol==="file:"?"local file":location.host||"unknown";
+  let verdict;
+  if(cors)verdict="Open-Meteo answered just now \u2014 try Get soundings again.";
+  else if(reach)verdict="Open-Meteo is reachable but refused the browser request: almost certainly its request limit. Wait 10\u201360 minutes (the free tier allows 600/min, 5000/h, 10000/day per IP) and try again.";
+  else if(net)verdict="The internet works but Open-Meteo is blocked from this page (a content blocker, network filter, or the viewer's security policy).";
+  else verdict="No internet connection from this page.";
+  return "Diagnosis ["+where+" \u00B7 online="+navigator.onLine+"]: "+verdict;
+}
+/* keep under Open-Meteo's 600 calls/min (a request counts ~ variables/10 per location) */
+const SENT=[];
+async function paced(weight){
+  const LIMIT=450;
+  for(;;){
+    const now=Date.now();
+    while(SENT.length&&now-SENT[0][0]>60000)SENT.shift();
+    const used=SENT.reduce((a,b)=>a+b[1],0);
+    if(used+weight<=LIMIT||!SENT.length)break;
+    status("WAITING (rate limit)");
+    await new Promise(r=>setTimeout(r,Math.max(500,60000-(now-SENT[0][0])+200)));
+  }
+  SENT.push([Date.now(),weight]);
+}
+async function resolveModel(m){
+  if(m.id in RESOLVED)return RESOLVED[m.id];
+  for(const cand of m.ids){
+    let r;
+    try{
+      r=await fetch("https://api.open-meteo.com/v1/forecast?latitude=35&longitude=139"+
+        "&hourly=temperature_500hPa&forecast_days=1&models="+cand);
+    }catch(e){throw netErr("model check",e);}
+    if(r.ok){RESOLVED[m.id]=cand;return cand;}
+  }
+  RESOLVED[m.id]=null;return null;
+}
+
+/* Which model run is being shown? Open-Meteo publishes per-model metadata:
+   last_run_initialisation_time (the run's reference time) and
+   last_run_availability_time (when it became usable on the API).
+   The directory names are probed because they are not documented in one place;
+   if none answers (blocked, renamed, no CORS) the readout simply omits it. */
+const META_DIRS={gfs:["ncep_gfs025","ncep_gfs013"],icon:["dwd_icon","dwd_icon_global"],
+                 gsm:["jma_gsm"],ifs:["ecmwf_ifs025","ecmwf_ifs"]};
+const RUNINFO={};
+const toMs=v=>{
+  if(v==null)return null;
+  if(typeof v==="number")return v<1e12?v*1000:v;
+  const t=Date.parse(v);return isFinite(t)?t:null;
+};
+async function fetchRunInfo(mid){
+  RUNINFO[mid]=null;
+  for(const dir of META_DIRS[mid]||[]){
+    try{
+      const ac=new AbortController(),to=setTimeout(()=>ac.abort(),4000);
+      const r=await fetch(`https://api.open-meteo.com/data/${dir}/static/meta.json`,{signal:ac.signal});
+      clearTimeout(to);
+      if(!r.ok)continue;
+      const j=await r.json();
+      const init=toMs(j.last_run_initialisation_time);
+      if(init==null)continue;
+      RUNINFO[mid]={init,avail:toMs(j.last_run_availability_time||j.last_run_modification_time)};
+      return;
+    }catch{}
+  }
+}
+/* "GFS 12Z run (usable 16:40Z, 3.2 h ago)" for every model in use */
+function runText(){
+  const z=ms=>new Date(ms).toISOString().slice(5,16).replace("T"," ")+"Z";
+  return PICKED.map(id=>{
+    const ri=RUNINFO[id];if(!ri)return null;
+    const age=(Date.now()-ri.init)/3600e3;
+    return modelOf(id).label+" run "+z(ri.init)+
+      (ri.avail?" (usable "+z(ri.avail).slice(6)+")":"")+
+      ", "+(age<0?"0":age.toFixed(1))+" h old";
+  }).filter(Boolean).join("  \u00B7  ");
+}
+
+async function fetchPoint(w,hs){
+  const p={latitude:w.lat.toFixed(4),longitude:w.lon.toFixed(4),hourly:hs,
+    models:PICKED.map(id=>RESOLVED[id]).filter(Boolean).join(","),
+    wind_speed_unit:"kn",timezone:"GMT",past_days:String(PAST),forecast_days:"3"};
+  let r,j=null;
+  await paced(12*Math.max(1,PICKED.length));
+  try{
+    r=await fetch("https://api.open-meteo.com/v1/forecast?"+new URLSearchParams(p));
+  }catch(e){throw netErr("forecast",e);}
+  try{j=await r.json();}catch{}
+  if(r.ok&&j&&!j.error)return j;
+  throw new Error((j&&j.reason)?j.reason:("HTTP "+r.status));
+}
+
+/* Four extra grid points around a waypoint (N,S,E,W) for the primary model:
+   gives horizontal gradients of temperature and wind on each pressure level.
+   One request, four locations, only 3 variables x 12 levels. */
+async function fetchNeighbors(w,rid){
+  const la=w.lat,lo=w.lon;
+  const dlat=NB_D;
+  const dlon=NB_D/Math.max(0.35,Math.cos(Math.min(70,Math.abs(la))*Math.PI/180));
+  const wrap=x=>((x+540)%360)-180;
+  const pts=[[la+dlat,lo],[la-dlat,lo],[la,wrap(lo+dlon)],[la,wrap(lo-dlon)]]
+    .map(([a,b])=>[Math.max(-89,Math.min(89,a)),b]);
+  const hs=[];NB_LEVELS.forEach(L=>NB_VARS.forEach(v=>hs.push(`${v}_${L}hPa`)));
+  const p={latitude:pts.map(q=>q[0].toFixed(4)).join(","),
+           longitude:pts.map(q=>q[1].toFixed(4)).join(","),
+           hourly:hs.join(","),models:rid,wind_speed_unit:"kn",
+           timezone:"GMT",past_days:String(PAST),forecast_days:"3"};
+  let r,j=null;
+  await paced(16);
+  try{r=await fetch("https://api.open-meteo.com/v1/forecast?"+new URLSearchParams(p));}
+  catch(e){throw netErr("neighbour grid",e);}
+  try{j=await r.json();}catch{}
+  if(!r.ok||!j||j.error||!Array.isArray(j)||j.length!==4)
+    throw new Error((j&&j.reason)?j.reason:("HTTP "+r.status));
+  return {model:rid,pts:j};
+}
+
+async function getSoundings(){
+  if(!WPS.length)return;
+  say("");
+  const hourly=[];
+  LEVELS.forEach(L=>VARS.concat(OPT_VARS).forEach(v=>hourly.push(`${v}_${L}hPa`)));
+  hourly.push("surface_pressure");
+  const hs=hourly.join(",");
+
+  // resolve model ids first
+  status("CHECKING MODELS");
+  const dead=[];
+  try{
+    for(const id of PICKED){
+      const m=modelOf(id);
+      if(!await resolveModel(m))dead.push(m.label);
+    }
+  }catch(e){
+    status("DIAGNOSING");
+    const dg=await netDiag();
+    status("FAILED");
+    say("Could not reach the weather service (Open-Meteo) at the model check ["+(e.detail||e.message)+"]. "+dg,true);
+    return;
+  }
+  if(!PICKED.some(id=>RESOLVED[id])){
+    status("FAILED");
+    say("None of the selected models are available right now.",true);return;
+  }
+
+  T0=Date.now();PAST=2;                  // history for the negative offsets
+  const runP=Promise.all(PICKED.filter(id=>RESOLVED[id]).map(fetchRunInfo));
+  RAW=new Array(WPS.length).fill(null);
+  NB=new Array(WPS.length).fill(null);
+  let blocked=null,reason=null,nbFail=0,nbReason=null;
+  const prim=RESOLVED[PICKED.find(id=>RESOLVED[id])];
+  for(let i=0;i<WPS.length;i++){
+    status(`FETCHING ${i+1}/${WPS.length}`);
+    try{RAW[i]=await fetchPoint(WPS[i],hs);}
+    catch(e){
+      if(e.message==="BLOCKED"){blocked={i,stage:e.stage,detail:e.detail};break;}
+      if(!reason)reason=e.message;
+      continue;
+    }
+    if(USE_NB&&prim){
+      try{NB[i]=await fetchNeighbors(WPS[i],prim);}
+      catch(e){
+        // the 2D extra must never take the basic soundings down with it
+        nbFail++;if(!nbReason)nbReason=e.message==="BLOCKED"?"network error: "+e.detail:e.message;
+      }
+    }
+  }
+  const got=RAW.filter(Boolean).length;
+  if(blocked&&!got){
+    status("DIAGNOSING");
+    const dg=await netDiag();
+    status("FAILED");
+    say("Could not reach the weather service (Open-Meteo) at the "+blocked.stage+" request ["+blocked.detail+"]. "+dg,true);
+    return;
+  }
+  if(!got){
+    status("FAILED");say("No data came back"+(reason?": "+reason:"."),true);return;
+  }
+  const notes=[];
+  if(blocked)notes.push("Connection lost at point "+(blocked.i+1)+" of "+WPS.length+
+    " ["+blocked.detail+"] \u2014 this is typical of Open-Meteo's request limit (600/min). "+
+    "Showing the "+got+" points received; wait a minute and press Get soundings again for the rest.");
+  if(reason)notes.push("Some points failed: "+reason);
+  if(dead.length)notes.push("Unavailable right now: "+dead.join(", ")+".");
+  if(nbFail)notes.push("2D CAT analysis missing at "+nbFail+" point(s) ("+nbReason+
+    "); those columns fall back to vertical shear only.");
+  if(notes.length)say(notes.join("  "),true);
+  await runP;
+  const rt=runText();
+  $("#modNote").textContent=(rt?rt+" — ":"")+(PICKED.length>1
+    ? modelOf(PICKED[0]).label+" drives the readout · "+
+      PICKED.slice(1).map(m=>modelOf(m).label).join(", ")+" overlaid"
+    : "first one drives the readout");
+  drawOffsets();
+  rerender(true);
+}
+
+/* rebuild every profile at the current offset — no network */
+function rerender(reset){
+  PROF=WPS.map((w,i)=>RAW[i]?buildProfile(RAW[i],w,OFFSET,NB[i]):null);
+  applyTropoSlope(PROF);
+  const good=PROF.filter(Boolean).length;
+  status(good+"/"+WPS.length+" OK");
+  // the forecast only spans 2 days back to 3 days ahead: say so instead of
+  // silently showing the nearest edge of the data
+  const far=PROF.filter(p=>p&&p.tdiff>2*3600e3);
+  if(far.length)say(far.length+" point(s) have a time outside the data range the model returns "+
+    "("+PAST+" days back to 3 days ahead); the nearest available hour is shown. Choose a closer time.",true);
+  if(!good)return;
+  $("#ribPanel").classList.remove("hide");
+  $("#soundCols").classList.remove("hide");
+  const t0=(PROF.find(Boolean)||{}).time||"";
+  const when=t0?"valid "+t0.slice(0,10)+" "+t0.slice(11,16)+"Z":"";
+  $("#ribNote").textContent=
+    `${OFFSET?(OFFSET>0?"+":"")+OFFSET+" h from now":"now"} \u00B7 ${when} \u00B7 ${runText()||"model run time unavailable"}`;
+  if(reset||!PROF[SEL])SEL=PROF.findIndex(Boolean);
+  drawRibbon();drawSkewT(PROF[SEL]);drawReadout(PROF[SEL]);
+  document.querySelectorAll("#wpTable tbody tr").forEach((tr,k)=>
+    tr.classList.toggle("sel",k===SEL));
+}
+
+function drawModels(){
+  const box=$("#mods");box.innerHTML="";
+  MODELS.forEach(m=>{
+    const b=document.createElement("button");
+    b.textContent=m.label;
+    b.title=m.org;
+    b.className=PICKED.includes(m.id)?"on":"";
+    if(PICKED.includes(m.id)&&PICKED[0]!==m.id)b.style.opacity=".78";
+    b.onclick=()=>{
+      const i=PICKED.indexOf(m.id);
+      if(i<0)PICKED.push(m.id);
+      else if(PICKED.length>1)PICKED.splice(i,1);
+      else return;                       // keep at least one
+      drawModels();
+      $("#modNote").textContent=RAW.filter(Boolean).length
+        ? "changed — press Get soundings to reload"
+        : "first one drives the readout · others overlay";
+    };
+    box.append(b);
+  });
+}
+
+const OFFSETS=[-24,-12,-6,0,1,2,3,6,9,12,18,24,36,48];
+function drawOffsets(){
+  const box=$("#offs");box.innerHTML="";
+  OFFSETS.forEach(h=>{
+    const b=document.createElement("button");
+    b.textContent=h>0?"+"+h+"h":h<0?h+"h":"NOW";
+    b.className=h===OFFSET?"on":"";
+    b.onclick=()=>{OFFSET=h;drawOffsets();rerender(false);};
+    box.append(b);
+  });
+}
+
+/* ---- horizontal gradients from the N/S/E/W neighbours ------------------- */
+const uvOf=(ws,wd)=>[-ws*KT*Math.sin(wd*Math.PI/180),-ws*KT*Math.cos(wd*Math.PI/180)]; // m/s
+function crossGeometry(nb){
+  const [N,S,E,W]=nb.pts;
+  if([N,S,E,W].some(q=>q.latitude==null||q.longitude==null))return null;
+  // use the grid points the model actually returned, not the ones requested
+  const dlon=((E.longitude-W.longitude+540)%360)-180;
+  const latM=(E.latitude+W.latitude)/2*Math.PI/180;
+  const dx=dlon*Math.PI/180*R_E*Math.cos(latM);
+  const dy=(N.latitude-S.latitude)*Math.PI/180*R_E;
+  return (dx>2e4&&dy>2e4)?{dx,dy}:null;       // < 20 km: grid snapped, unusable
+}
+function attachCross(lv,nb,tstr){
+  const g=crossGeometry(nb);if(!g)return 0;
+  const idx=nb.pts.map(q=>q.hourly&&q.hourly.time?q.hourly.time.indexOf(tstr):-1);
+  if(idx.some(i=>i<0))return 0;
+  const get=(k,v,L)=>{
+    const h=nb.pts[k].hourly;
+    const a=h[`${v}_${L}hPa_${nb.model}`]||h[`${v}_${L}hPa`];
+    return a?a[idx[k]]:null;
+  };
+  let n=0;
+  lv.forEach(x=>{
+    if(!NB_LEVELS.includes(x.p))return;
+    const T=[],U=[],V=[],S=[];                       // order: N,S,E,W
+    for(let k=0;k<4;k++){
+      const t=get(k,"temperature",x.p),s=get(k,"wind_speed",x.p),d=get(k,"wind_direction",x.p);
+      if(t==null||s==null||d==null)return;
+      const [u,v]=uvOf(s,d);T.push(t);U.push(u);V.push(v);S.push(s*KT);
+    }
+    x.cx={dTdx:(T[2]-T[3])/g.dx,dTdy:(T[0]-T[1])/g.dy,
+          dudx:(U[2]-U[3])/g.dx,dudy:(U[0]-U[1])/g.dy,
+          dvdx:(V[2]-V[3])/g.dx,dvdy:(V[0]-V[1])/g.dy,
+          dSdx:(S[2]-S[3])/g.dx,dSdy:(S[0]-S[1])/g.dy};
+    n++;
+  });
+  return n;
+}
+
+function buildProfile(set,w,offsetH,nb){
+  if(!set||!set.hourly)return null;
+  const h=set.hourly,times=h.time;
+  const baseMs=T0;                       // common time for the whole route
+  const target=baseMs+(offsetH||0)*3600e3;
+  let idx=0,best=Infinity;
+  times.forEach((t,i)=>{
+    const d=Math.abs(Date.parse(t+"Z")-target);
+    if(d<best){best=d;idx=i;}
+  });
+
+  // one request can carry several models; keys gain a _<model> suffix then
+  const byModel={};
+  for(const mid of PICKED){
+    const rid=RESOLVED[mid];
+    if(!rid)continue;
+    const get=(v,L)=>{
+      const a=h[`${v}_${L}hPa_${rid}`]||h[`${v}_${L}hPa`];
+      return a?a[idx]:null;
+    };
+    const spArr=h[`surface_pressure_${rid}`]||h.surface_pressure;
+    const sp=spArr?spArr[idx]:null;
+    const lv=[];
+    for(const L of LEVELS){
+      const T=get("temperature",L),RH=get("relative_humidity",L),
+            WS=get("wind_speed",L),WD=get("wind_direction",L),
+            Z=get("geopotential_height",L);
+      if([T,RH,WS,WD,Z].some(v=>v==null))continue;
+      if(sp!=null&&L>sp+1)continue;
+      const cc=get("cloud_cover",L);      // optional: null is fine
+      lv.push({p:L,T,Td:dewFromRH(T,RH),ws:WS,wd:WD,z:Z,ft:Z*3.28084,
+               cc:cc==null?null:cc});
+    }
+    if(lv.length<5)continue;
+    lv.sort((a,b)=>b.p-a.p);
+    // each level represents a slab: use midpoints so shading and the printed
+    // base/top figures describe exactly the same piece of air
+    lv.forEach((x,i)=>{
+      x.ftLo=i===0?x.ft:(lv[i-1].ft+x.ft)/2;
+      x.ftHi=i===lv.length-1?x.ft:(x.ft+lv[i+1].ft)/2;
+    });
+    let ncx=0;
+    if(nb&&nb.model===rid&&mid===PICKED[0])ncx=attachCross(lv,nb,times[idx]);
+    byModel[mid]={lv,diag:diagnose(lv,{lat:w.lat})};
+  }
+  const avail=PICKED.filter(m=>byModel[m]);
+  if(!avail.length)return null;
+  const prim=avail[0];
+  return {wp:w,time:times[idx],tdiff:best,byModel,avail,
+          lv:byModel[prim].lv,diag:byModel[prim].diag,primary:prim};
+}
+
+/* =====================================================================
+   7. diagnostics
+   ===================================================================== */
+function diagnose(lv,meta){
+  const d={};
+  d.ft0  = interpAt(lv,0  ,x=>x.ft,x=>x.T);
+  d.p0   = interpAt(lv,0  ,x=>x.p ,x=>x.T);
+  d.ftM20= interpAt(lv,-20,x=>x.ft,x=>x.T);
+  d.pM20 = interpAt(lv,-20,x=>x.p ,x=>x.T);
+
+  d.trop=null;
+  for(let i=0;i<lv.length-1;i++){
+    if(lv[i].p>500)continue;
+    const dz=(lv[i+1].z-lv[i].z)/1000;if(dz<=0)continue;
+    if(-(lv[i+1].T-lv[i].T)/dz<=2){d.trop={p:lv[i].p,ft:lv[i].ft};break;}
+  }
+  // strongest wind within the usable band only — above FL450 this picks up
+  // stratospheric flow that no aeroplane will ever meet
+  const band=lv.filter(x=>x.ft<=JET_MAX_FT);
+  const src=band.length?band:lv;
+  let mj=src[0];src.forEach(x=>{if(x.ws>mj.ws)mj=x;});
+  d.jet={ws:mj.ws,wd:mj.wd,p:mj.p,ft:mj.ft};
+
+  d.shear=[];
+  d.shearAt=[];
+  for(let i=0;i<lv.length-1;i++){
+    const dft=lv[i+1].ft-lv[i].ft;if(dft<=0)continue;
+    const uv=x=>[-x.ws*Math.sin(x.wd*Math.PI/180),-x.ws*Math.cos(x.wd*Math.PI/180)];
+    const [u1,v1]=uv(lv[i]),[u2,v2]=uv(lv[i+1]);
+    const sv=Math.hypot(u2-u1,v2-v1)/dft*1000;
+    // pure directional change: a big veer at modest speed barely moves the
+    // vector shear, yet still marks a shear layer worth knowing about
+    let dd=Math.abs(lv[i+1].wd-lv[i].wd)%360;
+    if(dd>180)dd=360-dd;
+    d.shearAt.push({a:lv[i],b:lv[i+1],s:sv,turn:dd/dft*1000});
+    if(sv>=6)d.shear.push({a:lv[i].p,b:lv[i+1].p,s:sv});
+  }
+  d.shear.sort((a,b)=>b.s-a.s);
+
+  /* cloud layers straight from the model's pressure-level cloud cover —
+     more trustworthy than inferring cloud from relative humidity */
+  d.cloud=[];d.hasCloud=lv.some(x=>x.cc!=null);
+  if(d.hasCloud){
+    let run=null;
+    lv.forEach((x,i)=>{
+      const wet=x.cc!=null&&x.cc>=CLOUD_MIN;
+      if(wet&&!run)run={base:x.ftLo,top:x.ftHi,pb:x.p,pt:x.p,max:x.cc};
+      else if(wet&&run){run.top=x.ftHi;run.pt=x.p;run.max=Math.max(run.max,x.cc);}
+      else if(!wet&&run){d.cloud.push(run);run=null;}
+    });
+    if(run)d.cloud.push(run);
+  }
+
+  const sfc=lv[0];
+  d.lcl=lclPressure(sfc.p,sfc.T,sfc.Td);
+  d.parcel=parcelProfile(sfc,d.lcl);
+
+  // buoyancy on a fine grid, then CAPE over LFC–EL and CIN below the LFC only
+  const grid=[];
+  for(let p=sfc.p;p>=Math.max(100,lv[lv.length-1].p);p-=5){
+    const pt=parcelT(d.parcel,p),et=interpEnv(lv,p);
+    if(pt==null||et==null)continue;
+    grid.push({p,b:pt-et});
+  }
+  let lfc=-1;
+  for(let i=0;i<grid.length;i++)
+    if(grid[i].p<=d.lcl&&grid[i].b>0){lfc=i;break;}
+  let elx=-1;
+  if(lfc>=0)for(let i=lfc+1;i<grid.length;i++)
+    if(grid[i].b<0){elx=i;break;}
+  if(elx<0)elx=grid.length-1;
+
+  const integ=(a,z,sign)=>{
+    let s=0;
+    for(let i=a;i<z;i++){
+      const b=(grid[i].b+grid[i+1].b)/2;
+      if(sign>0?b<=0:b>=0)continue;
+      s+=Rd*b*Math.log(grid[i].p/grid[i+1].p);
+    }
+    return s;
+  };
+  d.cape = lfc>=0 ? integ(lfc,elx,1) : 0;
+  d.cin  = lfc>=0 ? integ(0,lfc,-1) : 0;
+  d.lfc  = lfc>=0 ? grid[lfc].p : null;
+  d.el   = lfc>=0 ? grid[elx].p : null;
+  catDiagnose(lv,d,meta&&meta.lat!=null?meta.lat:35);
+  return d;
+}
+
+/* =====================================================================
+   7b. CAT diagnostics — per layer between adjacent pressure levels
+   ---------------------------------------------------------------------
+   Always available (single column):  vertical wind shear, Richardson no.
+   With neighbour grid points:        deformation, divergence, vorticity,
+                                      Ellrod TI1/TI2, potential vorticity
+                                      (2 PVU dynamic tropopause), jet side,
+                                      true 2D temperature gradient (front).
+   Without them PV uses planetary vorticity only (flagged "approx").
+   ===================================================================== */
+/* Combined score of one layer. H-shear, the front gradient and the 2PVU slope never
+   raise it on their own (all three are high around every jet); they only count as
+   supporting factors when CAT index / Ri / veer already show something. */
+function scoreLayer(L){
+  const comp=[L.s.cat,L.ri<RI_CRIT&&!L.wet?L.s.ri:0,L.s.turn];
+  L.sev=Math.max.apply(null,comp);
+  const supH=L.sev>=1&&L.s.hshear>=1,supF=L.sev>=1&&L.s.front>=1,supS=L.sev>=1&&L.s.slope>=1;
+  const n=comp.filter(x=>x>=1).length+(supH?1:0)+(supF?1:0)+(supS?1:0);
+  if(n>=3&&L.sev<3)L.sev++;                              // three factors agreeing
+  L.why=[];
+  if(L.s.cat>=1)L.why.push(L.ti2!=null?"TI2 "+L.ti2.toFixed(1):"shear "+L.vws.toFixed(0)+" kt/1000ft");
+  if(comp[1]>=1)L.why.push("Ri "+(L.ri<0?"<0":L.ri.toFixed(2)));
+  if(L.s.turn>=1)L.why.push("veer "+Math.round(L.turn)+"\u00B0/1000ft");
+  if(supH)L.why.push("H-shear "+Math.round(L.hs)+" kt/100nm");
+  if(supF)L.why.push("front "+L.front.toFixed(1)+"\u00B0/100nm");
+  if(supS)L.why.push("2PVU slope "+Math.round(L.slope/100)*100+" ft/100nm");
+}
+/* merge neighbouring layers of the same severity into blocks (labels + readout) */
+function buildBlocks(d){
+  d.turbBlocks=[];
+  let run=null;
+  d.cat.forEach(c=>{
+    if(run&&c.sev===run.sev&&Math.abs(c.ftLo-run.ftHi)<1){
+      run.ftHi=c.ftHi;
+      c.why.forEach(w=>{const k=w.split(" ")[0];if(!run.why.some(x=>x.split(" ")[0]===k))run.why.push(w);});
+    }else{
+      if(run)d.turbBlocks.push(run);
+      run=c.sev>=1?{ftLo:c.ftLo,ftHi:c.ftHi,sev:c.sev,why:c.why.slice()}:null;
+    }
+  });
+  if(run)d.turbBlocks.push(run);
+}
+/* Slope of the 2 PVU surface along the route (ft per 100 nm, worst adjacent leg).
+   Layers from 6000 ft below to 3000 ft above the surface count it as support. */
+const SLOPE_T=[3000,6000];
+function applyTropoSlope(profs){
+  const list=profs.filter(p=>p&&p.diag&&p.diag.dyn);
+  list.forEach(p=>{p._slope=0;});
+  for(let i=0;i<list.length-1;i++){
+    const a=list[i],b=list[i+1];
+    const nm=nmBetween([a.wp.lat,a.wp.lon],[b.wp.lat,b.wp.lon]);
+    if(!(nm>20))continue;
+    const sl=Math.abs(a.diag.dyn.ft-b.diag.dyn.ft)/nm*100;
+    a._slope=Math.max(a._slope,sl);b._slope=Math.max(b._slope,sl);
+  }
+  list.forEach(p=>{
+    const d=p.diag,zt=d.dyn.ft,sl=p._slope;
+    d.cat.forEach(L=>{
+      const near=L.ftHi>zt-6000&&L.ftLo<zt+3000;
+      L.slope=near?sl:0;
+      L.s.slope=near?(sl>=SLOPE_T[1]?2:sl>=SLOPE_T[0]?1:0):0;
+      scoreLayer(L);
+    });
+    buildBlocks(d);
+  });
+}
+
+function catDiagnose(lv,d,lat){
+  const rad=Math.PI/180,f=2*OMEGA*Math.sin(lat*rad),sgn=lat>=0?1:-1;
+  const th=x=>(x.T+273.15)*Math.pow(1000/x.p,0.2854);
+  d.cat=[];d.d2=false;
+  const scoreL=scoreLayer;
+  for(let i=0;i<lv.length-1;i++){
+    const a=lv[i],b=lv[i+1],dz=b.z-a.z;
+    if(!(dz>50))continue;
+    const [ua,va]=uvOf(a.ws,a.wd),[ub,vb]=uvOf(b.ws,b.wd);
+    const vws=Math.hypot(ub-ua,vb-va)/dz;                 // 1/s
+    const tha=th(a),thb=th(b);
+    const n2=G0*Math.log(thb/tha)/dz;                      // dry N^2
+    const L={a,b,ftLo:a.ft,ftHi:b.ft,
+      vws:vws*304.8/KT,                                    // kt / 1000 ft
+      n2,ri:n2/Math.max(vws*vws,1e-9),
+      wet:(a.cc!=null&&a.cc>=CLOUD_MIN)||(b.cc!=null&&b.cc>=CLOUD_MIN),
+      pm:Math.sqrt(a.p*b.p),ftM:(a.ft+b.ft)/2,
+      def:null,div:null,vor:null,ti1:null,ti2:null,hs:null};
+    let zeta=0;
+    if(a.cx&&b.cx){
+      const m=k=>(a.cx[k]+b.cx[k])/2;
+      const dudx=m("dudx"),dudy=m("dudy"),dvdx=m("dvdx"),dvdy=m("dvdy");
+      const dst=dudx-dvdy,dsh=dvdx+dudy;
+      L.def=Math.hypot(dst,dsh);L.div=dudx+dvdy;
+      // relative vorticity incl. the spherical metric term
+      zeta=dvdx-dudy+((ua+ub)/2)*Math.tan(lat*rad)/R_E;
+      L.vor=zeta;
+      L.ti1=vws*L.def*1e7;
+      L.ti2=vws*(L.def-L.div)*1e7;
+      L.hs=L.def*NM*100/KT;                                // kt / 100 nm
+      d.d2=true;
+    }
+    const dthdp=(thb-tha)/((b.p-a.p)*100);                 // K/Pa (<0 when stable)
+    L.pv=-G0*(zeta+f)*dthdp*sgn/1e-6;                      // PVU, positive both hemispheres
+    L.pvApprox=!(L.vor!=null);
+    // direction change with height
+    let dd=Math.abs(b.wd-a.wd)%360;if(dd>180)dd=360-dd;
+    L.turn=dd/Math.max(b.ft-a.ft,1)*1000;
+    // severity of each factor, 0..3
+    const sv=(x,t)=>x==null?0:x>=t[2]?3:x>=t[1]?2:x>=t[0]?1:0;
+    L.s={cat:L.ti2!=null?sv(L.ti2,[TI_LGT,TI_MOD,TI_SEV]):sv(L.vws,VWS_T),
+         vws:sv(L.vws,VWS_T),
+         // Ri < 1 is common in a jet stream; only Ri < 0.25 counts towards the
+         // combined score (it still has its own lane). Cloudy layers: unreliable, ignored.
+         ri:L.wet?0:(L.ri<0?3:L.ri<RI_CRIT?2:L.ri<RI_WARN?1:0),
+         turn:sv(L.turn,TURN_T),hshear:sv(L.hs,HS_T)};
+    L.front=0;L.s.front=0;
+    scoreL(L);
+    d.cat.push(L);
+  }
+
+  // dynamic tropopause: first downward crossing of PV_TROP coming from the stratosphere
+  d.dyn=null;
+  let inStrat=false;
+  for(let i=d.cat.length-1;i>=0;i--){
+    const c=d.cat[i];
+    if(c.pv>=PV_TROP){inStrat=true;continue;}
+    if(!inStrat)continue;
+    const u=d.cat[i+1];
+    const fr=(PV_TROP-c.pv)/(u.pv-c.pv);
+    const p=Math.exp(Math.log(c.pm)+fr*(Math.log(u.pm)-Math.log(c.pm)));
+    if(p>600)break;                                        // too low to be a tropopause
+    d.dyn={p,ft:c.ftM+fr*(u.ftM-c.ftM),approx:c.pvApprox||u.pvApprox};
+    break;
+  }
+
+  // 2D front: magnitude of the horizontal temperature gradient on each level
+  d.fr2=[];d.front2=null;
+  if(d.d2){
+    const ceil=d.trop?d.trop.p:0;
+    lv.forEach(x=>{
+      if(!x.cx||x.p<ceil||x.ft>JET_MAX_FT)return;
+      const g=Math.hypot(x.cx.dTdx,x.cx.dTdy)*NM*100;      // degC / 100 nm
+      const cold=(Math.atan2(-x.cx.dTdx,-x.cx.dTdy)/rad+360)%360;
+      d.fr2.push({p:x.p,ft:x.ft,ftLo:x.ftLo,ftHi:x.ftHi,grad:g,cold});
+    });
+    let pk=null;
+    d.fr2.forEach(h=>{if(h.grad>=FRONT_MIN&&(!pk||h.grad>pk.grad))pk=h;});
+    d.front2=pk;
+    // frontal gradient as a supporting factor, per layer
+    d.cat.forEach(L=>{
+      let g=0;
+      d.fr2.forEach(q=>{if(q.ftHi>L.ftLo&&q.ftLo<L.ftHi&&q.grad>g)g=q.grad;});
+      L.front=g;L.s.front=g>=FRONT_STRONG?2:g>=FRONT_MIN?1:0;
+      scoreL(L);
+    });
+  }
+
+  buildBlocks(d);
+
+  // jet position relative to the axis: sign of the cross-stream speed gradient
+  d.jetSide=null;
+  const jl=lv.find(x=>x.p===d.jet.p);
+  if(jl&&jl.cx){
+    const [u,v]=uvOf(jl.ws,jl.wd),sp=Math.hypot(u,v);
+    if(sp>1){
+      const nl=[-v/sp,u/sp];                               // left of the flow
+      const g=(jl.cx.dSdx*nl[0]+jl.cx.dSdy*nl[1])*NM*100/KT; // kt/100nm per step left
+      const side=Math.abs(g)<JET_AXIS_GRAD?"axis":(g<0?"left":"right");
+      d.jetSide={g,side,cyclonic:side==="axis"?null:((side==="left")===(sgn>0))};
+    }
+  }
+}
+function interpEnv(lv,p){
+  for(let i=0;i<lv.length-1;i++){
+    const a=lv[i].p,b=lv[i+1].p;
+    if(p<=a&&p>=b){
+      const f=Math.log(a/p)/Math.log(a/b||1);
+      return lv[i].T+f*(lv[i+1].T-lv[i].T);
+    }
+  }
+  return null;
+}
+function parcelProfile(sfc,pLcl){
+  const pts=[],thetaK=(sfc.T+273.15)*Math.pow(1000/sfc.p,0.2854);
+  for(let p=sfc.p;p>=pLcl;p-=5)pts.push([p,dryAdiabat(thetaK,p)]);
+  const tLcl=dryAdiabat(thetaK,pLcl);
+  moistAdiabat(tLcl,pLcl,30,5).forEach(q=>pts.push(q));
+  return pts;
+}
+function parcelT(pts,p){
+  for(let i=0;i<pts.length-1;i++){
+    const a=pts[i][0],b=pts[i+1][0];
+    if((p<=a&&p>=b)||(p>=a&&p<=b)){
+      const f=(a-p)/(a-b||1e-9);
+      return pts[i][1]+f*(pts[i+1][1]-pts[i][1]);
+    }
+  }
+  return null;
+}
+
+/* Frontal zone across one leg. The front surface sits where the horizontal
+   temperature gradient peaks, so report that level plus the depth of the
+   zone around it. Note this is the gradient ALONG the route: a leg running
+   parallel to a front will show almost nothing however sharp the front is. */
+function frontBetween(A,B){
+  const dist=nmBetween([A.wp.lat,A.wp.lon],[B.wp.lat,B.wp.lon]);
+  if(dist<5)return null;
+  const hits=[];
+  A.lv.forEach(a=>{
+    const b=B.lv.find(z=>z.p===a.p);
+    if(!b)return;
+    hits.push({p:a.p,
+      ft:(a.ft+b.ft)/2,
+      ftLo:(a.ftLo+b.ftLo)/2,
+      ftHi:(a.ftHi+b.ftHi)/2,
+      yA:a.ft,yB:b.ft,
+      grad:Math.abs(b.T-a.T)/dist*100});
+  });
+  const strong=hits.filter(h=>h.grad>=FRONT_MIN);
+  if(!strong.length)return null;
+  let peak=strong[0];strong.forEach(h=>{if(h.grad>peak.grad)peak=h;});
+  return {dist,hits,peak,n:strong.length,
+    base:Math.min.apply(null,strong.map(h=>h.ftLo)),
+    top:Math.max.apply(null,strong.map(h=>h.ftHi))};
+}
+
+/* =====================================================================
+   8. route ribbon  — the whole flight in one strip
+   ===================================================================== */
+const LAYERS={cloud:true,icing:true,turb:true,cat:false,ri:false,shear:false,turn:false,
+              hshear:false,front:true,tropo:true,pv:true,jet:true};
+const LAYER_META=[
+  ["cloud", "Cloud",  "#6b7a83"],
+  ["icing", "Icing",  "#0b6e9c"],
+  ["turb",  "Turb",   "#e8772e"],
+  ["cat",   "CAT",    "#d9541e"],
+  ["ri",    "Ri",     "#8e1b3a"],
+  ["shear", "V-shear","#b03a2e"],
+  ["turn",  "Veer",   "#1f7a8c"],
+  ["hshear","H-shear","#9c4a00"],
+  ["front", "Front",  "#7b3fa0"],
+  ["tropo", "Tropo",  "#5d6a71"],
+  ["pv",    "2PVU",   "#2a7f62"],
+  ["jet",   "Jet",    "#a35f00"]
+];
+const catCol=ti=>ti>=TI_SEV?"#b0102a":ti>=TI_MOD?"#d9541e":"#e3a008";
+function drawRibLegend(){
+  const b=$("#ribLegend");if(!b)return;
+  const sw=(c,o,t)=>`<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:14px;height:10px;background:${c};opacity:${o}"></span>${t}</span>`;
+  let h="";
+  if(LAYERS.turb)h+=`<b>Turb</b> `+sw("#f2c14e",.92,"light")+sw("#e8772e",.92,"moderate")+
+    sw("repeating-linear-gradient(45deg,#c0262d 0 3px,#e8a0a4 3px 5px)",1,"severe")+
+    `<span>worst of CAT index / Ri&lt;0.25 / veer; H-shear, front &amp; 2PVU slope only as support</span>`;
+  const on=[["cat","CAT","#d9541e"],["ri","Ri","#8e1b3a"],["shear","V-shear","#b03a2e"],
+    ["turn","Veer","#1f7a8c"],["hshear","H-shear","#9c4a00"]].filter(x=>LAYERS[x[0]]);
+  if(on.length)h+=`<b>Lanes (left→right)</b> `+on.map(x=>sw(x[2],.9,x[1])).join("")+
+    `<span>pale = light, solid = severe</span>`;
+  if(LAYERS.front)h+=sw("#7b3fa0",.5,"front (far right)");
+  b.innerHTML=h;
+}
+function drawLayerToggles(){
+  const box=$("#layers");if(!box)return;
+  box.innerHTML="";
+  LAYER_META.forEach(([k,label,col])=>{
+    const b=document.createElement("button");
+    b.textContent=label;
+    b.className=LAYERS[k]?"on":"";
+    if(LAYERS[k]){b.style.background=col;b.style.borderColor=col;}
+    b.onclick=()=>{LAYERS[k]=!LAYERS[k];drawLayerToggles();drawRibbon();drawRibLegend();};
+    box.append(b);
+  });
+}
+
+function drawRibbon(){
+  const ok=PROF.map((p,i)=>({p,i})).filter(o=>o.p);
+  drawRibLegend();
+  if(ok.length<1){$("#ribbon").innerHTML="";return;}
+  const L=58,R=18,T=22,B=52,H=600;
+  const W=Math.max(1180,L+R+(ok.length-1)*118);          // wide enough that labels never crowd
+  const pw=W-L-R,ph=H-T-B,maxFt=52000;
+  const X=i=>ok.length===1?L+pw/2:L+i/(ok.length-1)*pw;
+  const Y=ft=>T+ph-Math.min(Math.max(ft,0),maxFt)/maxFt*ph;
+  const colW=ok.length>1?(pw/(ok.length-1))*0.92:pw*0.5;
+  const s=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"Vertical profile along the route"});
+  s.style.minWidth=Math.min(W,1500)+"px";              // pan instead of shrinking the text
+
+  for(let ft=0;ft<=50000;ft+=5000){
+    s.append(el("line",{x1:L,x2:W-R,y1:Y(ft),y2:Y(ft),stroke:ft%10000?"#f0f3f4":"#e2e8ea","stroke-width":1}));
+    const tx=el("text",{x:L-7,y:Y(ft)+3.5,"text-anchor":"end",
+      "font-family":"var(--mono)","font-size":11,fill:"#8c979d"});
+    tx.textContent=ft?"FL"+(ft/100):"SFC";s.append(tx);
+  }
+
+  // cloud straight from the model's pressure-level cover
+  if(LAYERS.cloud)ok.forEach((o,k)=>{
+    const lv=o.p.lv;
+    for(let i=0;i<lv.length;i++){
+      const cc=lv[i].cc;
+      if(cc==null||cc<CLOUD_MIN)continue;
+      const y1=Y(lv[i].ftHi),y2=Y(lv[i].ftLo);
+      s.append(el("rect",{x:X(k)-colW/2,y:y1,width:colW,height:Math.max(y2-y1,1),
+        fill:"#6b7a83",
+        "fill-opacity":(0.10+0.30*(cc-CLOUD_MIN)/(100-CLOUD_MIN)).toFixed(3)}));
+    }
+  });
+
+  /* ---- turbulence ------------------------------------------------------
+     Left lane  : combined score per layer (worst of CAT index, Ri<0.25, veer;
+                  H-shear only supports; one more step when three agree).  Never overlapping.
+     Right lanes: each factor you switch on gets its own thin lane, so the
+                  contributors can be compared side by side instead of stacked.
+     Rightmost  : front strip. */
+  const defs=el("defs");
+  const pat=el("pattern",{id:"catHatch",width:6,height:6,patternUnits:"userSpaceOnUse",
+    patternTransform:"rotate(45)"});
+  pat.append(el("line",{x1:0,y1:0,x2:0,y2:6,stroke:"#fff","stroke-width":2.2,"stroke-opacity":.7}));
+  defs.append(pat);s.append(defs);
+
+  const LANES=[["cat","#d9541e"],["ri","#8e1b3a"],["shear","#b03a2e"],["turn","#1f7a8c"],["hshear","#9c4a00"]];
+  const lanes=LANES.filter(([k])=>LAYERS[k]);
+  const frontW=LAYERS.front?Math.max(5,colW*0.09):0;
+  const usable=colW-frontW;
+  const compW=LAYERS.turb?(lanes.length?usable*0.6:usable):0;
+  const laneW=lanes.length?(usable-compW)/lanes.length:0;
+  const x0=k=>X(k)-colW/2;
+  const SEVC=["","#f2c14e","#e8772e","#c0262d"],SEVN=["","LGT","MOD","SEV"];
+  const OPA=[0,.4,.7,1];
+  const laneSev=(c,key)=>key==="cat"?c.s.cat:key==="shear"?c.s.vws:key==="turn"?c.s.turn:
+    key==="hshear"?c.s.hshear:(c.wet?0:(c.ri<RI_CRIT?(c.ri<0?3:2):c.ri<RI_WARN?1:0));
+
+  if(LAYERS.turb||lanes.length)ok.forEach((o,k)=>{       // faint column ground: clear air reads as clear
+    s.append(el("rect",{x:x0(k),y:T,width:usable,height:ph,fill:"var(--panel)","fill-opacity":.65}));
+  });
+  ok.forEach((o,k)=>{
+    (o.p.diag.cat||[]).forEach(c=>{
+      const y1=Y(c.ftHi),h=Math.max(Y(c.ftLo)-y1,1);
+      if(compW&&c.sev>0){
+        const r=el("rect",{x:x0(k),y:y1,width:compW,height:h,fill:SEVC[c.sev],"fill-opacity":.92});
+        const t=el("title");
+        t.textContent="FL"+Math.round(c.ftLo/100)+"\u2013"+Math.round(c.ftHi/100)+" "+SEVN[c.sev]+
+          (c.why.length?"\n"+c.why.join(" \u00B7 "):"");
+        r.append(t);s.append(r);
+        if(c.sev>=3)s.append(el("rect",{x:x0(k),y:y1,width:compW,height:h,fill:"url(#catHatch)"}));
+      }
+      lanes.forEach(([key,col],j)=>{
+        const sv=laneSev(c,key);if(!sv)return;
+        s.append(el("rect",{x:x0(k)+compW+j*laneW,y:y1,width:Math.max(laneW-1,2),height:h,
+          fill:col,"fill-opacity":OPA[sv]}));
+      });
+    });
+  });
+
+  // frontal zone: horizontal temperature gradient between adjacent points
+  const fronts=[],fronts2=[];
+  // 2D: gradient magnitude around the waypoint, independent of the route heading
+  if(LAYERS.front)ok.forEach((o,k)=>{
+    const d=o.p.diag;if(!d.d2)return;
+    d.fr2.forEach(h=>{
+      if(h.grad<FRONT_MIN)return;
+      const f=Math.min(1,(h.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN));
+      // own strip at the far right of the column, never over the turbulence lanes
+      s.append(el("rect",{x:x0(k)+usable,y:Y(h.ftHi),width:frontW,
+        height:Math.max(Y(h.ftLo)-Y(h.ftHi),1),fill:"#7b3fa0",
+        "fill-opacity":(0.14+f*0.42).toFixed(3)}));
+    });
+    if(d.front2)fronts2.push({k,pk:d.front2});
+  });
+  // along-route fallback for legs where neither end has 2D data
+  if(LAYERS.front)for(let k=0;k<ok.length-1;k++){
+    if(ok[k].p.diag.d2||ok[k+1].p.diag.d2)continue;
+    const fr=frontBetween(ok[k].p,ok[k+1].p);
+    if(!fr)continue;
+    fronts.push({k,fr});
+    fr.hits.forEach(h=>{
+      if(h.grad<FRONT_MIN)return;
+      const f=Math.min(1,(h.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN));
+      s.append(el("line",{x1:X(k),x2:X(k+1),y1:Y(h.yA),y2:Y(h.yB),
+        stroke:"#7b3fa0","stroke-width":(1.5+f*7).toFixed(1),
+        "stroke-opacity":(0.14+f*0.42).toFixed(3)}));
+    });
+  }
+
+  if(LAYERS.icing){
+    const top=[],bot=[];
+    ok.forEach((o,k)=>{const d=o.p.diag;
+      if(d.ft0!=null&&d.ftM20!=null){bot.push([X(k),Y(d.ft0)]);top.push([X(k),Y(d.ftM20)]);}});
+    if(bot.length>1){
+      const pts=bot.concat(top.reverse()).map(q=>q.join(",")).join(" ");
+      s.append(el("polygon",{points:pts,fill:"var(--ice)","fill-opacity":.13,
+        stroke:"var(--ice)","stroke-opacity":.5,"stroke-width":1}));
+    }
+  }
+
+  /* ---- label placement ---------------------------------------------------
+     Every label is queued, then placed highest priority first.  A label that
+     would overlap one already placed (or a jet symbol) slides up/down to the
+     nearest free spot; if none exists it is dropped (the Readout still has it). */
+  const FS=11,LH=12.5;
+  const Q=[],OB=[];
+  const tw=(t,w)=>t.length*FS*(w>=600?0.64:0.6)+4;
+  // lines: [[text,colour,weight,dy],...]; y = baseline of dy=0
+  const put=(x,y,lines,pri,opt)=>Q.push(Object.assign({x,y,lines,pri},opt||{}));
+  const lbl=(x,y,txt,col,w,pri)=>put(x,y,[[txt,col,w||400,0]],pri==null?3:pri);
+  const flushLabels=()=>{
+    const hit=(a,b)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
+    const STEPS=[0];for(let d=4;d<=70;d+=4){STEPS.push(d,-d);}
+    const tryPlace=(g)=>{
+      const w=Math.max.apply(null,g.lines.map(l=>tw(l[0],l[2])));
+      const t0=Math.min.apply(null,g.lines.map(l=>l[3]))-FS+1,b0=Math.max.apply(null,g.lines.map(l=>l[3]))+3;
+      const x=Math.min(Math.max(g.x,L+w/2),W-R-w/2);
+      const steps=g.inY?(()=>{const out=[0],m=(g.inY[1]-g.inY[0])/2;
+        for(let d=3;d<=m;d+=3)out.push(d,-d);return out;})():STEPS;
+      for(const sh of steps){
+        const y=g.y+sh,bx={x1:x-w/2,x2:x+w/2,y1:y+t0,y2:y+b0};
+        if(bx.y1<T-6||bx.y2>T+ph+6)continue;
+        if(g.inY&&(bx.y1<g.inY[0]-1||bx.y2>g.inY[1]+1))continue;
+        if(OB.some(o=>hit(o,bx)))continue;
+        OB.push(bx);
+        g.lines.forEach(([txt,col,wt,dy])=>{
+          [{fill:"none",stroke:"var(--paper)","stroke-width":3.2,"stroke-linejoin":"round"},{fill:col}]
+          .forEach(extra=>{
+            const t=el("text",Object.assign({x,y:y+dy,"text-anchor":"middle",
+              "font-family":"var(--mono)","font-size":FS,"font-weight":wt||400,
+              "pointer-events":"none"},extra));
+            t.textContent=txt;s.append(t);
+          });
+        });
+        return true;
+      }
+      return false;
+    };
+    Q.sort((a,b)=>b.pri-a.pri);
+    Q.forEach(g=>{if(!tryPlace(g)&&g.alt)tryPlace(Object.assign({},g,{lines:g.alt,alt:null}));});
+  };
+
+  // label every turbulence block with its level range (kept inside the block)
+  if(compW>=34)ok.forEach((o,k)=>{
+    (o.p.diag.turbBlocks||[]).forEach(b=>{
+      const top=Y(b.ftHi),bot=Y(b.ftLo),hgt=bot-top;
+      const cy=(top+bot)/2,cx=x0(k)+compW/2,col=b.sev>=3?"#7a1016":"#3d1c04";
+      const fl="FL"+Math.round(b.ftLo/100)+"\u2013"+Math.round(b.ftHi/100);
+      const two=[[SEVN[b.sev],col,700,0],[fl,col,600,LH]],one=[[fl,col,600,0]];
+      if(hgt>=2*LH+4)put(cx,cy-LH/2+4,two,8,{inY:[top,bot],alt:one});
+      else if(hgt>=LH+3)put(cx,cy+4,one,8,{inY:[top,bot]});
+    });
+  });
+
+  // frontal surface: mark and label the level of strongest gradient
+  fronts.forEach(({k,fr})=>{
+    const xm=(X(k)+X(k+1))/2,ym=Y(fr.peak.ft);
+    s.append(el("line",{x1:xm-9,x2:xm+9,y1:ym,y2:ym,
+      stroke:"#7b3fa0","stroke-width":2.4,"stroke-linecap":"round"}));
+    put(xm,ym-7,[["FL"+Math.round(fr.peak.ft/100),"#7b3fa0",700,0],
+      [fr.peak.grad.toFixed(1)+"\u00B0/100nm","#7b3fa0",400,LH]],9);
+  });
+
+  // 2D frontal peak: level, strength and the bearing towards the cold air
+  fronts2.forEach(({k,pk})=>{
+    const x=X(k),ym=Y(pk.ft);
+    const xl=Math.min(Math.max(x,L+34),W-R-34);      // keep the text inside the plot
+    s.append(el("line",{x1:x0(k)+usable-2,x2:x0(k)+colW,y1:ym,y2:ym,
+      stroke:"#7b3fa0","stroke-width":2.6,"stroke-linecap":"round"}));
+    const cr=coldRel(pk.cold,trackAtIdx(ok[k].i));
+    put(xl,ym-3-LH,[["FL"+Math.round(pk.ft/100),"#7b3fa0",700,0],
+      [pk.grad.toFixed(1)+"°/100nm","#7b3fa0",700,LH],
+      [cr?"cold "+cr.txt:"cold "+String(Math.round(pk.cold)).padStart(3,"0")+"°","#7b3fa0",600,2*LH]],9);
+  });
+
+  // dynamic tropopause (2 PVU) — dotted, so it reads against the thermal one
+  if(LAYERS.pv){
+    const dp=ok.map((o,k)=>o.p.diag.dyn?[X(k),Y(o.p.diag.dyn.ft)]:null).filter(Boolean);
+    if(dp.length>1)s.append(el("polyline",{points:dp.map(q=>q.join(",")).join(" "),
+      fill:"none",stroke:"#2a7f62","stroke-width":1.8,"stroke-dasharray":"2 4",
+      "stroke-linecap":"round"}));
+    ok.forEach((o,k)=>{
+      const dy=o.p.diag.dyn;
+      if(dy)lbl(X(k),Y(dy.ft)+12,"FL"+Math.round(dy.ft/100)+(dy.approx?"~":""),"#2a7f62",400,5);
+    });
+  }
+
+  if(LAYERS.tropo){
+    const tp=ok.map((o,k)=>o.p.diag.trop?[X(k),Y(o.p.diag.trop.ft)]:null).filter(Boolean);
+    if(tp.length>1)s.append(el("polyline",{points:tp.map(q=>q.join(",")).join(" "),
+      fill:"none",stroke:"var(--ink2)","stroke-width":1.6,"stroke-dasharray":"7 4"}));
+    ok.forEach((o,k)=>{
+      const tr=o.p.diag.trop;
+      if(tr)lbl(X(k),Y(tr.ft)-6,"FL"+Math.round(tr.ft/100),"var(--ink2)",400,5);
+    });
+  }
+
+  if(LAYERS.jet)ok.forEach((o,k)=>{
+    const j=o.p.diag.jet;if(!j)return;
+    const r=3+Math.min(j.ws,160)/160*8;
+    s.append(el("circle",{cx:X(k),cy:Y(j.ft),r,fill:"var(--amber)","fill-opacity":.2,
+      stroke:"var(--amber)","stroke-width":1.3}));
+    const th=(j.wd+180)*Math.PI/180,len=15;
+    const dx=Math.sin(th),dy=-Math.cos(th);
+    const x0=X(k)-dx*(r+2),y0=Y(j.ft)-dy*(r+2);
+    const x1=x0+dx*len,y1=y0+dy*len;
+    s.append(el("line",{x1:x0,y1:y0,x2:x1,y2:y1,stroke:"var(--amber)",
+      "stroke-width":1.6,"stroke-linecap":"round"}));
+    const ah=4.5,pa=th+Math.PI*0.82,pb=th-Math.PI*0.82;
+    s.append(el("polyline",{fill:"none",stroke:"var(--amber)","stroke-width":1.6,
+      "stroke-linecap":"round",points:
+        `${x1+Math.sin(pa)*ah},${y1-Math.cos(pa)*ah} ${x1},${y1} `+
+        `${x1+Math.sin(pb)*ah},${y1-Math.cos(pb)*ah}`}));
+    OB.push({x1:X(k)-r-17,x2:X(k)+r+17,y1:Y(j.ft)-r-17,y2:Y(j.ft)+r+17});   // symbol + arrow
+    lbl(X(k),Y(j.ft)-r-21,String(Math.round(j.wd)).padStart(3,"0")+"\u00B0/"+
+        Math.round(j.ws)+"kt","var(--amber)",600,10);
+    lbl(X(k),Y(j.ft)+r+19,"FL"+Math.round(j.ft/100),"var(--amber)",400,6);
+  });
+
+  ok.forEach((o,k)=>{
+    const sel=o.i===SEL;
+    s.append(el("line",{x1:X(k),x2:X(k),y1:T,y2:T+ph,
+      stroke:sel?"var(--route)":"#cfd8dc","stroke-width":sel?2:1,
+      "stroke-opacity":sel?1:.55}));
+    const g=el("g",{style:"cursor:pointer"});
+    g.append(el("rect",{x:X(k)-26,y:T,width:52,height:ph,fill:"transparent"}));
+    g.addEventListener("click",()=>select(o.i));
+    s.append(g);
+    if(LAYERS.cloud&&o.p.diag.cloud&&o.p.diag.cloud.length){
+      const c=o.p.diag.cloud;
+      const base=Math.min(...c.map(x=>x.base)),top=Math.max(...c.map(x=>x.top));
+      lbl(X(k),Y(top)-5,"FL"+Math.round(top/100),"#3f4f58",400,4);
+      lbl(X(k),Y(base)+11,"FL"+Math.round(base/100),"#3f4f58",400,4);
+    }
+    const t=el("text",{x:X(k),y:H-26,"text-anchor":"middle",
+      "font-family":"var(--sans)","font-size":13,
+      "font-weight":sel?700:500,fill:sel?"var(--route)":"var(--ink2)",
+      "letter-spacing":".04em"});
+    t.textContent=o.p.wp.name;s.append(t);
+  });
+
+  flushLabels();
+  $("#ribbon").innerHTML="";$("#ribbon").append(s);
+}
+
+/* =====================================================================
+   9. skew-T
+   ===================================================================== */
+function select(i){
+  if(i<0||!PROF[i])return;
+  SEL=i;
+  document.querySelectorAll("#wpTable tbody tr").forEach((tr,k)=>
+    tr.classList.toggle("sel",k===i));
+  drawRibbon();drawSkewT(PROF[i]);drawReadout(PROF[i]);
+}
+
+const P_TOP=100,P_BOT=1050,T_MIN=-80,T_MAX=40;
+
+function drawSkewT(pr){
+  const W=740,H=680,L=46,R=64,T=14,B=34;
+  const pw=W-L-R,ph=H-T-B,SK=pw*0.92;
+  const Y=p=>T+Math.log(p/P_TOP)/Math.log(P_BOT/P_TOP)*ph;
+  const XB=t=>L+(t-T_MIN)/(T_MAX-T_MIN)*pw;
+  const X=(t,p)=>XB(t)+SK*((T+ph-Y(p))/ph);
+
+  const s=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img",
+    "aria-label":"Skew-T diagram for "+pr.wp.name});
+  const clipId="c"+Math.random().toString(36).slice(2,8);
+  const defs=el("defs");
+  const cp=el("clipPath",{id:clipId});
+  cp.append(el("rect",{x:L,y:T,width:pw,height:ph}));
+  defs.append(cp);s.append(defs);
+  const g=el("g",{"clip-path":`url(#${clipId})`});
+
+  const poly=(pts,attrs)=>{
+    const d=pts.filter(q=>isFinite(q[0])&&isFinite(q[1]))
+               .map(q=>q.join(",")).join(" ");
+    if(d)g.append(el("polyline",Object.assign({points:d,fill:"none"},attrs)));
+  };
+
+  // dry adiabats
+  for(let th=-30;th<=210;th+=15){
+    const pts=[];
+    for(let p=P_BOT;p>=P_TOP;p-=15)pts.push([X(dryAdiabat(th+273.15,p),p),Y(p)]);
+    poly(pts,{stroke:"#d98f43","stroke-width":.7,"stroke-opacity":.5});
+  }
+  // moist adiabats
+  for(let t0=-20;t0<=40;t0+=5){
+    const pts=moistAdiabat(t0,1000,P_TOP,10).map(q=>[X(q[1],q[0]),Y(q[0])]);
+    poly(pts,{stroke:"#3f9b6d","stroke-width":.7,"stroke-opacity":.45,
+      "stroke-dasharray":"4 3"});
+  }
+  // mixing ratio
+  [0.4,1,2,4,7,10,16,24,32].forEach(w=>{
+    const pts=[];
+    for(let p=1000;p>=400;p-=20){
+      const e=w/1000*p/(EPS+w/1000),l=Math.log(e/6.112);
+      pts.push([X(243.5*l/(17.67-l),p),Y(p)]);
+    }
+    poly(pts,{stroke:"#3d8fb0","stroke-width":.6,"stroke-opacity":.4,
+      "stroke-dasharray":"1 4"});
+  });
+  // isotherms
+  for(let t=-120;t<=60;t+=10){
+    const y1=Y(P_BOT),y2=Y(P_TOP),x1=X(t,P_BOT),x2=X(t,P_TOP);
+    const zero=t===0;
+    g.append(el("line",{x1,y1,x2,y2,stroke:zero?"var(--ice)":"#cdd6da",
+      "stroke-width":zero?1.4:.8,"stroke-opacity":zero?.9:1}));
+    if(t===-20)g.append(el("line",{x1:X(t,P_BOT),y1,x2:X(t,P_TOP),y2,
+      stroke:"var(--ice)","stroke-width":1,"stroke-dasharray":"5 4","stroke-opacity":.7}));
+  }
+  s.append(g);
+
+  // isobars + labels
+  [1000,850,700,500,400,300,250,200,150,100].forEach(p=>{
+    s.append(el("line",{x1:L,x2:W-R,y1:Y(p),y2:Y(p),stroke:"#c3ccd1","stroke-width":.9}));
+    const t=el("text",{x:L-6,y:Y(p)+3.5,"text-anchor":"end",
+      "font-family":"var(--mono)","font-size":10,fill:"#5d6a71"});
+    t.textContent=p;s.append(t);
+  });
+  // flight levels from the actual profile
+  [[850,"FL050"],[700,"FL100"],[500,"FL180"],[400,"FL235"],
+   [300,"FL300"],[250,"FL340"],[200,"FL390"],[150,"FL445"]].forEach(([p,fl])=>{
+    const t=el("text",{x:L+4,y:Y(p)-4,"font-family":"var(--mono)","font-size":9,
+      fill:"#8c979d"});t.textContent=fl;s.append(t);
+  });
+  // isotherm labels along the bottom
+  for(let t=-80;t<=40;t+=20){
+    const x=X(t,P_BOT);
+    if(x<L-10||x>W-R+10)continue;
+    const tx=el("text",{x,y:T+ph+15,"text-anchor":"middle",
+      "font-family":"var(--mono)","font-size":10,fill:"#5d6a71"});
+    tx.textContent=t;s.append(tx);
+  }
+  const ax=el("text",{x:L+pw/2,y:H-6,"text-anchor":"middle",
+    "font-family":"var(--sans)","font-size":11,fill:"#8c979d",
+    "letter-spacing":".1em"});
+  ax.textContent="TEMPERATURE  \u00B0C";s.append(ax);
+
+  // traces
+  const gg=el("g",{"clip-path":`url(#${clipId})`});
+  const trace=(key,color)=>{
+    const pts=pr.lv.map(v=>[X(v[key],v.p),Y(v.p)]);
+    gg.append(el("polyline",{points:pts.map(q=>q.join(",")).join(" "),fill:"none",
+      stroke:color,"stroke-width":2.6,"stroke-linejoin":"round","stroke-linecap":"round"}));
+  };
+  // secondary models: temperature only, thin, so the spread is visible
+  pr.avail.filter(m=>m!==pr.primary).forEach(mid=>{
+    const md=modelOf(mid),set=pr.byModel[mid];
+    const pts=set.lv.map(v=>[X(v.T,v.p),Y(v.p)]);
+    gg.append(el("polyline",{points:pts.map(q=>q.join(",")).join(" "),fill:"none",
+      stroke:md.col,"stroke-width":1.4,"stroke-opacity":.75,
+      "stroke-linejoin":"round"}));
+  });
+
+  // parcel first so it sits under
+  const pp=pr.diag.parcel.filter(q=>q[0]>=P_TOP).map(q=>[X(q[1],q[0]),Y(q[0])]);
+  gg.append(el("polyline",{points:pp.map(q=>q.join(",")).join(" "),fill:"none",
+    stroke:"#0e1417","stroke-width":1.2,"stroke-opacity":.55,"stroke-dasharray":"3 3"}));
+  trace("Td","var(--dewp)");
+  trace("T","var(--temp)");
+  s.append(gg);
+
+  // LCL dot
+  const lp=pr.diag.lcl;
+  if(lp>P_TOP&&lp<P_BOT){
+    const lt=parcelT(pr.diag.parcel,lp);
+    if(lt!=null){
+      s.append(el("circle",{cx:X(lt,lp),cy:Y(lp),r:3.4,fill:"#0e1417"}));
+      const t=el("text",{x:X(lt,lp)+7,y:Y(lp)+3.5,"font-family":"var(--mono)",
+        "font-size":9.5,fill:"#0e1417"});t.textContent="LCL";s.append(t);
+    }
+  }
+  // wind barbs
+  const bx=W-R+22;
+  const step=Math.max(1,Math.floor(pr.lv.length/15));
+  pr.lv.forEach((v,i)=>{
+    if(i%step)return;
+    s.append(barb(bx,Y(v.p),v.ws,v.wd));
+  });
+  const wl=el("text",{x:bx,y:T-2,"text-anchor":"middle","font-family":"var(--sans)",
+    "font-size":9.5,fill:"#8c979d","letter-spacing":".08em"});
+  wl.textContent="KT";s.append(wl);
+
+  $("#skewt").innerHTML="";$("#skewt").append(s);
+  drawLegend(pr);
+  $("#stTitle").textContent=pr.wp.name;
+  $("#stSub").textContent=
+    `${pr.wp.lat.toFixed(3)}, ${pr.wp.lon.toFixed(3)} · ${(pr.time||"").replace("T"," ")}Z · `+
+    `${modelOf(pr.primary).label} (${modelOf(pr.primary).org})`;
+}
+
+function drawLegend(pr){
+  const box=$("#legend");if(!box)return;
+  const item=(col,txt,dash)=>
+    `<span><i style="border-top-color:${col}${dash?";border-top-style:dashed":""}"></i>${txt}</span>`;
+  const prim=modelOf(pr.primary);
+  let h=item("var(--temp)",`Temp · ${prim.label}`)+
+        item("var(--dewp)",`Dewpoint · ${prim.label}`)+
+        item("#0e1417","Parcel",true);
+  pr.avail.filter(m=>m!==pr.primary).forEach(mid=>{
+    const md=modelOf(mid);h+=item(md.col,`Temp · ${md.label}`);
+  });
+  const miss=PICKED.filter(m=>!pr.avail.includes(m));
+  if(miss.length)h+=`<span style="color:var(--amber)">no data: `+
+    miss.map(m=>modelOf(m).label).join(", ")+`</span>`;
+  box.innerHTML=h;
+}
+
+function barb(x,y,ws,wd){
+  const g=el("g",{transform:`translate(${x},${y}) rotate(${wd})`});
+  const stroke="#0e1417",L0=-19;
+  g.append(el("line",{x1:0,y1:0,x2:0,y2:L0,stroke,"stroke-width":1.2}));
+  let rem=Math.round(ws/5)*5,off=L0,dir=1;
+  if(rem<5){g.append(el("circle",{cx:0,cy:0,r:2.6,fill:"none",stroke,"stroke-width":1.1}));return g;}
+  while(rem>=50){
+    g.append(el("polygon",{points:`0,${off} 0,${off+4.5} 8,${off+2.2}`,fill:stroke}));
+    off+=5.5;rem-=50;
+  }
+  while(rem>=10){
+    g.append(el("line",{x1:0,y1:off,x2:8,y2:off-2.4,stroke,"stroke-width":1.2}));
+    off+=3.4;rem-=10;
+  }
+  if(rem>=5)g.append(el("line",{x1:0,y1:off,x2:4,y2:off-1.2,stroke,"stroke-width":1.2}));
+  return g;
+}
+
+/* initial great-circle bearing a->b (deg true) and cold-air side relative to a track */
+function brg(a,b){
+  const r=Math.PI/180,f1=a.lat*r,f2=b.lat*r,dl=(b.lon-a.lon)*r;
+  return (Math.atan2(Math.sin(dl)*Math.cos(f2),
+    Math.cos(f1)*Math.sin(f2)-Math.sin(f1)*Math.cos(f2)*Math.cos(dl))/r+360)%360;
+}
+function coldRel(cold,trk){
+  if(trk==null)return null;
+  const rel=((cold-trk+540)%360)-180;            // + = right of track
+  const a=Math.abs(rel);
+  const side=a<20?"AHEAD":a>160?"BEHIND":rel>0?"RIGHT":"LEFT";
+  return {rel,txt:side==="AHEAD"||side==="BEHIND"?side:side+" "+Math.round(a)+"\u00B0"};
+}
+function trackAtIdx(i){
+  const nx=WPS.slice(i+1).find(w=>isFinite(w.lat)&&isFinite(w.lon));
+  const me=WPS[i];if(!me)return null;
+  if(nx)return brg(me,nx);
+  const pv=WPS.slice(0,i).reverse().find(w=>isFinite(w.lat)&&isFinite(w.lon));
+  return pv?brg(pv,me):null;
+}
+
+/* =====================================================================
+   10. readout
+   ===================================================================== */
+const ft=v=>v==null?"—":Math.round(v).toLocaleString()+" ft";
+const hpa=v=>v==null?"—":Math.round(v)+" hPa";
+
+function drawReadout(pr){
+  const d=pr.diag,R=[];
+  const grp=(lbl,rows)=>R.push(
+    `<div class="grp"><div class="lbl">${lbl}</div>`+
+    rows.map(([a,b,w])=>`<div class="row"><b>${a}</b><span class="v${w?" warn":""}">${b}</span></div>`).join("")+
+    `</div>`);
+
+  grp("Icing layer",[
+    ["0 °C",`${hpa(d.p0)} · ${ft(d.ft0)}`],
+    ["−20 °C",`${hpa(d.pM20)} · ${ft(d.ftM20)}`],
+    ["Depth",(d.ft0!=null&&d.ftM20!=null)
+      ?Math.round(d.ftM20-d.ft0).toLocaleString()+" ft":"—"]
+  ]);
+  if(d.hasCloud){
+    grp("Cloud (model cover \u2265"+CLOUD_MIN+"%)",
+      d.cloud.length
+        ?d.cloud.slice(0,4).map(c=>[
+            `FL${Math.round(c.base/100)}\u2013${Math.round(c.top/100)}`,
+            `${Math.round(c.max)}% max`])
+        :[["","none"]]);
+  }
+  // ---- combined turbulence: where to expect it, and why -------------------
+  {
+    const SN=["","LGT","MOD","SEV"];
+    const bl=(d.turbBlocks||[]).slice().sort((a,b)=>b.sev-a.sev||a.ftLo-b.ftLo).slice(0,5);
+    grp("Turbulence (combined, relative)",
+      bl.length
+        ?bl.map(b=>[`${SN[b.sev]} FL${Math.round(b.ftLo/100)}\u2013${Math.round(b.ftHi/100)}`,
+            b.why.join(" \u00B7 "),b.sev>=3])
+        :[["","no moderate-or-worse layer"]]);
+  }
+  // ---- CAT: ranked Ellrod layers + Richardson number ----------------------
+  if(d.d2){
+    const top=d.cat.filter(c=>c.ti2!=null&&c.ti2>=TI_LGT).sort((a,b)=>b.ti2-a.ti2).slice(0,4);
+    grp("CAT index (Ellrod TI2, relative)",
+      top.length
+        ?top.map(c=>[`FL${Math.round(c.ftLo/100)}–${Math.round(c.ftHi/100)}`,
+           `${c.ti2.toFixed(1)} · VWS ${c.vws.toFixed(0)} · DEF ${(c.def*1e5).toFixed(1)}`,
+           c.ti2>=TI_MOD])
+        :[["","below "+TI_LGT+" everywhere"]]);
+  }
+  const lowRi=(d.cat||[]).filter(c=>c.ri<RI_WARN&&c.vws>=2)
+    .sort((a,b)=>a.ri-b.ri).slice(0,4);
+  grp("Richardson no. < "+RI_WARN+(lowRi.some(c=>c.wet)?" (* moist: unreliable)":""),
+    lowRi.length
+      ?lowRi.map(c=>[`FL${Math.round(c.ftLo/100)}–${Math.round(c.ftHi/100)}`,
+         (c.ri<0?"unstable":c.ri.toFixed(2))+(c.wet?" *":""),c.ri<RI_CRIT])
+      :[["","none"]]);
+  if(d.d2&&d.jetSide){
+    const js=d.jetSide;
+    grp("Position vs jet axis",[
+      ["Side",js.side==="axis"?"on the axis"
+        :(js.side==="left"?"left":"right")+" of axis"+
+         (js.cyclonic==null?"":js.cyclonic?" (cyclonic)":" (anticyclonic)"),
+       js.side==="axis"||js.cyclonic===true],
+      ["Cross-stream",Math.abs(js.g).toFixed(1)+" kt/100nm"]
+    ]);
+  }
+  if(d.d2){
+    if(d.front2){
+      const fr=d.front2;
+      const cr0=coldRel(fr.cold,trackAtIdx(PROF.indexOf(pr)));
+      grp("Front (2D gradient)",[
+        ["Peak level","FL"+Math.round(fr.ft/100)+" · "+hpa(fr.p),fr.grad>=FRONT_STRONG],
+        ["Gradient",fr.grad.toFixed(1)+" °/100nm",fr.grad>=FRONT_STRONG],
+        ["Cold air toward",String(Math.round(fr.cold)).padStart(3,"0")+"° true"+
+          (cr0?" · "+cr0.txt+" of track":"")]
+      ]);
+    }else grp("Front (2D gradient)",[["","< "+FRONT_MIN+" °/100nm at all levels"]]);
+  }
+
+  const me=PROF.indexOf(pr);
+  const nxt=me>=0?PROF[me+1]:null;
+  if(nxt&&!d.d2){
+    const fr=frontBetween(pr,nxt);
+    if(fr)grp("Front toward "+nxt.wp.name,[
+      ["Surface","FL"+Math.round(fr.peak.ft/100),fr.peak.grad>=FRONT_STRONG],
+      ["Gradient",fr.peak.grad.toFixed(1)+" °/100nm",fr.peak.grad>=FRONT_STRONG],
+      ["Depth","FL"+Math.round(fr.base/100)+"–FL"+Math.round(fr.top/100)],
+      ["Leg",Math.round(fr.dist)+" nm"]
+    ]);
+  }
+
+  grp("Tropopause",[
+    ["Thermal",d.trop?`${hpa(d.trop.p)} · ${ft(d.trop.ft)}`:"not resolved"],
+    ["2 PVU"+(d.dyn&&d.dyn.approx?" (approx)":""),
+      d.dyn?`${hpa(d.dyn.p)} · ${ft(d.dyn.ft)}`:"not resolved"]
+  ]);
+  grp("Strongest wind ≤ FL450",[
+    ["Speed",Math.round(d.jet.ws)+" kt"],
+    ["From",String(Math.round(d.jet.wd)).padStart(3,"0")+"°"],
+    ["Height",`${hpa(d.jet.p)} · ${ft(d.jet.ft)}`]
+  ]);
+  grp("Surface parcel",[
+    ["LCL",hpa(d.lcl)],
+    ["LFC",d.lfc?hpa(d.lfc):"none — stable"],
+    ["EL",d.el?hpa(d.el):"—"],
+    ["CAPE",Math.round(d.cape)+" J/kg",d.cape>1000],
+    ["CIN",Math.round(d.cin)+" J/kg",d.cin<-100]
+  ]);
+  const turns=(d.shearAt||[]).filter(x=>x.turn>=TURN_MIN)
+    .sort((a,b)=>b.turn-a.turn);
+  grp("Veer ≥ "+TURN_MIN+" °/1000 ft",
+    turns.length
+      ?turns.slice(0,4).map(x=>[`${Math.round(x.a.p)}–${Math.round(x.b.p)} hPa`,
+         `${Math.round(x.a.wd)}→${Math.round(x.b.wd)}°`,x.turn>=30])
+      :[["","none"]]);
+  grp("Shear ≥ 6 kt/1000 ft",
+    d.shear.length
+      ?d.shear.slice(0,6).map(x=>[`${Math.round(x.a)}–${Math.round(x.b)} hPa`,
+         x.s.toFixed(1),x.s>=10])
+      :[["","none"]]);
+  $("#readout").innerHTML=R.join("");
+}
+
+/* =====================================================================
+   11. wiring
+   ===================================================================== */
+/* ---- text route: no API call ---------------------------------------- */
+const COORD_RE=/([NS]\s*\d{4,8}(?:\.\d+)?)\s*([EW]\s*\d{4,8}(?:\.\d+)?)|(\d{4,8}(?:\.\d+)?\s*[NS])\s*(\d{4,8}(?:\.\d+)?\s*[EW])/;
+const NAME_RE=/\b([A-Z]{2,5}\d?)\b/;
+
+function readText(txt){
+  const lines=txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const out=[];
+  lines.forEach((line,i)=>{
+    const m=line.match(COORD_RE);
+    if(!m)return;
+    const raw=(m[1]?m[1]+m[2]:m[3]+" "+m[4]).replace(/\s+/g,"");
+    let lat,lon;
+    try{[lat,lon]=parsePair(raw);}catch{return;}
+    // name: rest of this line first, else the nearest neighbouring line
+    let name=null;
+    const rest=line.replace(m[0],"").trim();
+    const pick=s=>{const q=s&&s.match(NAME_RE);return q&&!COORD_RE.test(s)?q[1]:null;};
+    name=pick(rest)||pick(lines[i+1])||pick(lines[i-1])||("WP"+(out.length+1));
+    out.push({name,raw,lat,lon,time:null});
+  });
+  return out;
+}
+
+/* ---- in-browser OCR (Tesseract.js, no key, nothing leaves the device) ----
+   Raw OCR confuses O/0, S/5, I/1, B/8. The saving grace is that this format
+   is rigid: N is followed by exactly digits, so anything sitting in a digit
+   slot can be coerced back. That is far safer than trusting OCR outright. */
+const OCR_SRC=[
+  "https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js",
+  "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"
+];
+const DIGIT={O:"0",Q:"0",D:"0",U:"0",I:"1",L:"1","|":"1","!":"1",J:"1",
+             Z:"2",A:"4",S:"5",G:"6",B:"8",T:"7",Y:"7"};
+const toDigits=t=>t.toUpperCase().split("")
+  .map(c=>/[0-9.]/.test(c)?c:(DIGIT[c]||c)).join("");
+
+function ocrFix(text){
+  const lines=text.split(/\r?\n/);
+  const out=[],coords=[];
+  lines.forEach(line=>{
+    const t=line.toUpperCase().replace(/[^A-Z0-9.]/g,"");
+    if(!t)return;
+    if(/^[-.]{3,}$/.test(t))return;                       // separator rule
+    const m=t.match(/^([NS])(.{4,7})([EW])(.{5,8})$/);
+    if(m){
+      const la=toDigits(m[2]),lo=toDigits(m[4]);
+      const cand=m[1]+la+m[3]+lo;
+      try{
+        const [a,b]=parsePair(cand);
+        if(a>=-90&&a<=90&&b>=-180&&b<=180){
+          coords.push({i:out.length,cand,nla:la.replace(/\D/g,"").length,
+                       nlo:lo.replace(/\D/g,"").length,
+                       fixed:cand!==t});
+          out.push(cand);return;
+        }
+      }catch{}
+    }
+    out.push(t);
+  });
+
+  /* A dropped character shortens a coordinate but leaves it parseable, so it
+     passes silently. Compare digit counts against the rest of the list —
+     the odd one out is almost always a misread. */
+  const modal=key=>{
+    const c={};coords.forEach(x=>{c[x[key]]=(c[x[key]]||0)+1;});
+    return Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+  };
+  const notes=[];
+  if(coords.length>2){
+    const ml=+modal("nla"),mo=+modal("nlo");
+    coords.forEach(x=>{
+      if(x.nla!==ml||x.nlo!==mo){
+        out[x.i]=x.cand+"   <-- CHECK: digit count differs from the rest";
+        notes.push(x.cand);
+      }
+    });
+  }
+  const changed=coords.filter(x=>x.fixed).length;
+  return {text:out.join("\n"),n:coords.length,changed,suspect:notes};
+}
+
+function loadScript(url){
+  return new Promise((res,rej)=>{
+    const el=document.createElement("script");
+    el.src=url;el.onload=res;el.onerror=()=>rej(new Error("load failed"));
+    document.head.append(el);
+  });
+}
+async function ensureTesseract(){
+  if(window.Tesseract)return;
+  for(const u of OCR_SRC){
+    try{await loadScript(u);if(window.Tesseract)return;}catch{}
+  }
+  throw new Error("The OCR library could not be downloaded. It needs internet "+
+    "access the first time, and does not load inside the chat window.");
+}
+
+async function runOCR(file){
+  const st=$("#ocrStat");
+  const set=t=>{st.textContent=t;};
+  try{
+    set("loading OCR…");
+    await ensureTesseract();
+    set("starting…");
+    const worker=await Tesseract.createWorker("eng",1,{
+      logger:m=>{if(m.status==="recognizing text")
+        set("reading "+Math.round(m.progress*100)+"%");}
+    });
+    await worker.setParameters({
+      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.- ",
+      tessedit_pageseg_mode:"6"
+    });
+    const {data:{text}}=await worker.recognize(file);
+    await worker.terminate();
+    const r=ocrFix(text);
+    $("#textIn").value=r.text;
+    set(r.n+" coordinate"+(r.n===1?"":"s")+
+        (r.changed?", "+r.changed+" corrected":""));
+    if(!r.n){
+      say("Nothing recognisable was found. A larger, sharper image usually fixes this.",true);
+    }else if(r.suspect.length){
+      say(r.suspect.length+" line(s) marked CHECK have a different digit count "+
+          "from the rest, which usually means a character was dropped. Fix those "+
+          "against the image, delete the CHECK note, then press Read text.",true);
+    }else{
+      say("Read the transcription against the image before continuing. "+
+          "An OCR misread that still looks like a valid coordinate is the one "+
+          "error nothing downstream can catch.");
+    }
+  }catch(e){
+    set("");say(e.message||"OCR failed.",true);
+  }
+}
+
+/* ---- assemble every waypoint into one printable document ----------------
+   iOS: Share -> Print -> pinch out on the preview -> Save to Files.
+   The result is readable in the air with no connection at all.          */
+function buildPrint(){
+  const area=$("#printArea");area.innerHTML="";
+  const keep=SEL;
+
+  const head=document.createElement("div");
+  head.className="pgroup";
+  const when=(PROF.find(Boolean)||{}).time||"";
+  head.innerHTML=
+    `<div class="ptitle">Route sounding</div>`+
+    `<div class="psub">${WPS.map(w=>w.name).join(" · ")}<br>`+
+    `${PICKED.map(id=>modelOf(id).label).join(" / ")} · `+
+    `${when.replace("T"," ")}Z${OFFSET?" +"+OFFSET+"h":""} · `+
+    `generated ${new Date().toISOString().slice(0,16).replace("T"," ")}Z<br>`+
+    `${runText()?runText()+"<br>":""}`+
+    `Model data via Open-Meteo. Not a meteorological authority — study use only.</div>`;
+  const rib=$("#ribbon").firstChild;
+  if(rib){const rc=rib.cloneNode(true);rc.style.minWidth="";head.append(rc);}
+  area.append(head);
+
+  PROF.forEach((pr,i)=>{
+    if(!pr)return;
+    drawSkewT(pr);drawReadout(pr);
+    const g=document.createElement("div");
+    g.className="pgroup";
+    g.innerHTML=`<div class="ptitle">${i+1}. ${pr.wp.name}</div>`+
+      `<div class="psub">${pr.wp.lat.toFixed(3)}, ${pr.wp.lon.toFixed(3)} · `+
+      `${(pr.time||"").replace("T"," ")}Z · ${modelOf(pr.primary).label}</div>`;
+    const cols=document.createElement("div");
+    cols.className="pcols";
+    const a=document.createElement("div"),b=document.createElement("div");
+    const sv=$("#skewt").firstChild;
+    if(sv)a.append(sv.cloneNode(true));
+    a.insertAdjacentHTML("beforeend",`<div class="legend">${$("#legend").innerHTML}</div>`);
+    b.innerHTML=`<div class="readout">${$("#readout").innerHTML}</div>`;
+    cols.append(a,b);g.append(cols);area.append(g);
+  });
+
+  SEL=keep;
+  if(PROF[SEL]){drawSkewT(PROF[SEL]);drawReadout(PROF[SEL]);}
+}
+
+/* =====================================================================
+   NAVLOG import — reads the NAVIGATION LOG of an airline flight plan
+   straight from the PDF text layer (pdf.js, on this device; no key, no OCR).
+   Row format (two lines per fix):
+     TC GS CTME  N35324E139573 . ZTME ALT ...      <- CTME = h.mm since takeoff
+     MC TAS RTME NAME          . DIST FL ...
+   Coordinates are DDMMt / DDDMMt (degrees, minutes, tenths of a minute).
+   ===================================================================== */
+const PDFJS_SRC="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+const PDFJS_WORKER="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+const NAV_COORD="[NS]\\d{4,6}[EW]\\d{5,7}";
+const NAV_KEEP=/^(ETP\d?|TOC|TOD)$/;       // always kept when thinning the route
+let NAV=null;
+
+/* text of every page, rebuilt into lines from the glyph positions */
+async function pdfText(file){
+  if(!window.pdfjsLib){
+    try{await loadScript(PDFJS_SRC);}
+    catch{throw new Error("the PDF library (pdf.js from cdnjs.cloudflare.com) could not be loaded \u2014 needs an internet connection");}
+  }
+  const lib=window.pdfjsLib;
+  const buf=await file.arrayBuffer();
+  // pdf.js wraps a cross-origin CDN worker itself; if no worker can start it
+  // falls back to the main thread, so this is safe on iPad Safari too
+  lib.GlobalWorkerOptions.workerSrc=PDFJS_WORKER;
+  const doc=await lib.getDocument({data:buf.slice(0)}).promise;
+  let out="";
+  for(let p=1;p<=doc.numPages;p++){
+    const pg=await doc.getPage(p);
+    const tc=await pg.getTextContent();
+    const rows=[];
+    tc.items.forEach(it=>{
+      if(!it.str)return;
+      const x=it.transform[4],y=it.transform[5];
+      let r=rows.find(q=>Math.abs(q.y-y)<2.5);
+      if(!r){r={y,items:[]};rows.push(r);}
+      r.items.push({x,w:it.width||0,h:it.height||8,s:it.str});
+    });
+    rows.sort((a,b)=>b.y-a.y);
+    rows.forEach(r=>{
+      r.items.sort((a,b)=>a.x-b.x);
+      let line="",end=null;
+      r.items.forEach(i=>{
+        if(end!=null&&i.x-end>i.h*0.25)line+=" ";
+        line+=i.s;end=i.x+i.w;
+      });
+      out+=line+"\n";
+    });
+    out+="\n";
+  }
+  return out;
+}
+
+const MONTHS={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
+
+/* -> {meta,rows,skipped} or null when no NAVLOG table is present */
+function parseNavlog(text){
+  const t=String(text).replace(/ /g," ");
+  const s=t.search(/TC\s+GS\s+CTME/);
+  if(s<0)return null;
+  let body=t.slice(s);
+  const e=body.search(/ALTERNATE\s+DATA|\bELEV\s+\d{3,4}\s*FT/);
+  if(e>0)body=body.slice(0,e);
+  const re=new RegExp("(\\d{2})\\.(\\d{2})\\s+("+NAV_COORD+")"+
+    "((?:(?!"+NAV_COORD+")[\\s\\S]){0,260}?)"+
+    "\\b\\d{3}\\s+(?:\\d{3}|\\.\\.)\\s+\\d{2}\\.\\d{2}\\s+([A-Z][A-Z0-9]{1,5})\\b","g");
+  const rows=[];let skipped=0,m;
+  while((m=re.exec(body))){
+    let lat,lon;
+    try{[lat,lon]=parsePair(m[3]);}catch{skipped++;continue;}
+    if(!(lat>=-90&&lat<=90&&lon>=-180&&lon<=180)){skipped++;continue;}
+    rows.push({name:m[5],raw:m[3],lat,lon,ctme:(+m[1])*60+(+m[2])});
+  }
+  const nCoord=(body.match(new RegExp(NAV_COORD,"g"))||[]).length;
+  const meta={};
+  const cs=t.match(/\b(ANA\d{3,4}|JAL\d{3,4}|[A-Z]{3}\d{3,4})\/\d{2}\/\d{2}/)||t.match(/\b([A-Z]{3}\d{3,4})\s+\d{4}\/\d{2}\/\d{2}/);
+  if(cs)meta.callsign=cs[1];
+  const rt=t.match(/\b([A-Z]{4})-([A-Z]{4})\b/);
+  if(rt){meta.dep=rt[1];meta.arr=rt[2];}
+  const std=t.match(/STD\s+(\d{2})(\d{2})Z/);
+  if(std)meta.std=(+std[1])*60+(+std[2]);
+  const dt=t.match(/COMPUTED[^\n]*?\b(\d{2})([A-Z]{3})(\d{2})\b/);
+  if(dt&&MONTHS[dt[2]])meta.date=`20${dt[3]}-${String(MONTHS[dt[2]]).padStart(2,"0")}-${dt[1]}`;
+  // sanity: elapsed time must never decrease
+  for(let i=1;i<rows.length;i++)
+    if(rows[i].ctme<rows[i-1].ctme){rows[i].check=true;}
+  return {meta,rows,skipped,nCoord};
+}
+
+const hhmm=min=>{min=((Math.round(min)%1440)+1440)%1440;
+  return String(Math.floor(min/60)).padStart(2,"0")+":"+String(min%60).padStart(2,"0");};
+const isoAt=(date,min)=>{
+  const [y,mo,d]=date.split("-").map(Number);
+  return new Date(Date.UTC(y,mo-1,d,0,min)).toISOString().slice(0,16);
+};
+
+/* keep the first/last fix, ETP/TOC/TOD, and anything >= minNm from the last kept */
+function thinNav(rows,minNm){
+  const out=[];let last=null;
+  rows.forEach((r,i)=>{
+    const edge=i===0||i===rows.length-1;
+    if(edge||NAV_KEEP.test(r.name)||!last||nmBetween(last,[r.lat,r.lon])>=minNm){
+      out.push(r);last=[r.lat,r.lon];
+    }
+  });
+  return out;
+}
+
+function setNav(nv){
+  NAV=nv;
+  const m=nv.meta;
+  $("#navInfo").textContent=[m.callsign,(m.dep&&m.arr)?m.dep+"-"+m.arr:"",
+    m.std!=null?"STD "+hhmm(m.std)+"Z":""].filter(Boolean).join(" · ");
+  $("#navBar").classList.remove("hide");
+  applyNav();
+}
+
+function applyNav(){
+  if(!NAV)return;
+  const m=NAV.meta;
+  const spacing=Math.max(0,+$("#navSpace").value||0);
+  const kept=thinNav(NAV.rows,spacing);
+  WPS=kept.map(r=>({name:r.name,raw:r.raw,lat:r.lat,lon:r.lon,ctme:r.ctme,time:"",
+    flags:r.check?["check"]:[]}));
+  // a different route invalidates anything already fetched
+  RAW=[];NB=[];PROF=[];
+  ["#ribPanel","#soundCols"].forEach(x=>$(x).classList.add("hide"));
+  drawTable();
+  status(WPS.length+" POINTS");
+  const notes=[];
+  notes.push("NAVLOG: "+NAV.rows.length+" fixes read, "+WPS.length+" kept (≥ "+spacing+" nm apart, plus ETP/TOC/TOD).");
+  if(NAV.skipped||(NAV.nCoord&&NAV.nCoord!==NAV.rows.length+NAV.skipped))
+    notes.push("Coordinates found: "+NAV.nCoord+", rows read: "+NAV.rows.length+" — check the table against the plan.");
+  notes.push("All points are read at one common time \u2014 choose NOW or +N h above the profile after Get soundings.");
+  say(notes.join(" "));
+}
+
+async function handle(file){
+  if(!file)return;
+  status("READING");say("");
+  $("#drop").querySelector("h2").textContent="Reading…";
+  try{
+    let done=false,pdfErr=null;
+    if(file.type==="application/pdf"||/\.pdf$/i.test(file.name||"")){
+      try{
+        const nv=parseNavlog(await pdfText(file));
+        if(nv&&nv.rows.length>=2){setNav(nv);done=true;}
+        else pdfErr="no NAVLOG table (TC GS CTME) found in the PDF text";
+      }catch(e){pdfErr=(e&&e.message)||String(e);}
+    }
+    if(!done){
+      NAV=null;$("#navBar").classList.add("hide");
+      try{ingest(await readFile(file));}
+      catch(e){throw new Error((e.message||"The file could not be read.")+
+        (pdfErr?"  \u2014 PDF text reader: "+pdfErr:""));}
+    }
+    if(done){/* message already set by applyNav */}
+    else if(!WPS.length){status("READY");say("No coordinates were found in that file."+
+        (pdfErr?"  \u2014 PDF text reader: "+pdfErr:""),true);}
+    else{status(WPS.length+" POINTS");
+      const f=WPS.filter(w=>w.flags.length).length;
+      if(f)say(f+" row"+(f>1?"s":"")+" need checking against the original — marked in the table. Every field is editable.");}
+    if(done)status(WPS.length+" POINTS");
+  }catch(e){
+    status("FAILED");say(e.message||"That file could not be read.",true);
+  }
+  $("#drop").querySelector("h2").textContent="Drop a flight plan";
+}
+
+const dz=$("#drop");
+dz.onclick=()=>$("#file").click();
+dz.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();$("#file").click();}};
+$("#file").onchange=e=>handle(e.target.files[0]);
+dz.addEventListener("dragover",e=>{e.preventDefault();dz.classList.add("hot");});
+dz.addEventListener("dragleave",()=>dz.classList.remove("hot"));
+dz.addEventListener("drop",e=>{e.preventDefault();dz.classList.remove("hot");
+  handle(e.dataTransfer.files[0]);});
+window.addEventListener("paste",e=>{
+  const it=[...(e.clipboardData?.items||[])].find(i=>i.type.startsWith("image/")||i.type==="application/pdf");
+  if(it)handle(it.getAsFile());
+});
+drawModels();drawLayerToggles();
+window.addEventListener("afterprint",()=>{$("#printArea").innerHTML="";});
+$("#run").onclick=getSoundings;
+$("#useNb").onchange=e=>{USE_NB=e.target.checked;};
+$("#clear").onclick=()=>{
+  WPS=[];RAW=[];NB=[];PROF=[];SEL=0;OFFSET=0;
+  $("#wpTable tbody").innerHTML="";
+  $("#offs").innerHTML="";
+  $("#ribbon").innerHTML="";$("#skewt").innerHTML="";$("#readout").innerHTML="";
+  ["#wpPanel","#ribPanel","#soundCols"].forEach(x=>$(x).classList.add("hide"));
+  $("#textIn").value="";
+  NAV=null;$("#navBar").classList.add("hide");
+  say("");status("READY");
+};
+$("#keyToggle").onclick=()=>{
+  const h=$("#keyBody").classList.toggle("hide");
+  $("#keyToggle").textContent=h?"Show":"Hide";
+  if(!h)$("#apiKey").focus();
+};
+$("#textToggle").onclick=()=>{
+  const b=$("#textBody"),h=b.classList.toggle("hide");
+  $("#textToggle").textContent=h?"Show":"Hide";
+  if(!h)$("#textIn").focus();
+};
+$("#printBtn").onclick=()=>{
+  if(!PROF.filter(Boolean).length)return;
+  buildPrint();
+  setTimeout(()=>window.print(),60);
+};
+$("#ocrBtn").onclick=()=>$("#ocrFile").click();
+$("#ocrFile").onchange=e=>{
+  if(e.target.files[0]){
+    $("#textBody").classList.remove("hide");
+    $("#textToggle").textContent="Hide";
+    runOCR(e.target.files[0]);
+  }
+};
+$("#textRun").onclick=()=>{
+  const nv=parseNavlog($("#textIn").value);
+  if(nv&&nv.rows.length>=2){setNav(nv);return;}
+  NAV=null;$("#navBar").classList.add("hide");
+  const rows=readText($("#textIn").value);
+  if(!rows.length){say("No coordinates found in that text.",true);return;}
+  WPS=rows.map(r=>({...r,time:"",flags:[]}));
+  let prev=null;
+  WPS.forEach(w=>{
+    if(prev&&nmBetween(prev,[w.lat,w.lon])>2000)w.flags.push("jump");
+    prev=[w.lat,w.lon];
+  });
+  drawTable();say("");status(WPS.length+" POINTS");
+};
+$("#navSpace").onchange=applyNav;
+$("#addRow").onclick=()=>{
+  WPS.push({name:"NEW",raw:"",lat:35,lon:139,time:"",flags:[]});drawTable();
+};
+</script>
