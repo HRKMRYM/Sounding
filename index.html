@@ -130,7 +130,11 @@ td.num{text-align:right}
   text-transform:uppercase;color:var(--ink3);margin-bottom:2px;
 }
 .readout .row{display:flex;justify-content:space-between;gap:10px}
-.readout .row b{font-weight:500}
+.readout .row b{font-weight:500;white-space:nowrap;flex:none}
+.readout .v{text-align:right;min-width:0;overflow-wrap:anywhere}
+.readout .row.stack{display:block;margin-bottom:5px}
+.readout .row.stack b{display:block}
+.readout .row.stack .v{display:block;text-align:left;color:var(--ink2);font-size:11px;padding-left:2px}
 .readout .v{color:var(--ink)}
 .warn{color:var(--amber)}
 
@@ -725,7 +729,7 @@ async function fetchRunInfo(mid){
   for(const dir of META_DIRS[mid]||[]){
     try{
       const ac=new AbortController(),to=setTimeout(()=>ac.abort(),4000);
-      const r=await fetch(`https://api.open-meteo.com/data/${dir}/static/meta.json`,{signal:ac.signal});
+      const r=await fetch(`https://api.open-meteo.com/data/${dir}/static/meta.json?_=${Date.now()}`,{signal:ac.signal});
       clearTimeout(to);
       if(!r.ok)continue;
       const j=await r.json();
@@ -746,6 +750,32 @@ function runText(){
       (ri.avail?" (usable "+z(ri.avail).slice(6)+")":"")+
       ", "+(age<0?"0":age.toFixed(1))+" h old";
   }).filter(Boolean).join("  \u00B7  ");
+}
+
+/* When is the next model run expected?  Runs come every 6 h; the delay between
+   initialisation and "usable" seen on the current run is assumed for the next one.
+   Returns {overdue, text} or null when nothing is known. */
+function nextRunInfo(){
+  const CYCLE=6*3600e3,hz=ms=>new Date(ms).toISOString().slice(11,16)+"Z";
+  const jst=ms=>new Date(ms+9*3600e3).toISOString().slice(5,16).replace("T"," ")+" JST";
+  const rows=[];
+  PICKED.forEach(id=>{
+    const ri=RUNINFO[id];if(!ri||!ri.avail||ri.avail<=ri.init)return;
+    // skip over cycles that should already have been published
+    const exp=ri.init+CYCLE+(ri.avail-ri.init);
+    rows.push({id,exp,late:Date.now()>=exp});
+  });
+  if(!rows.length)return null;
+  const late=rows.filter(r=>r.late),wait=rows.filter(r=>!r.late);
+  const parts=[];
+  if(late.length)parts.push(late.map(r=>modelOf(r.id).label).join(", ")+
+    ": a newer run should be out by now \u2014 press Get soundings again");
+  if(wait.length){
+    const t=Math.min.apply(null,wait.map(r=>r.exp));
+    parts.push("next run expected about "+hz(t)+" ("+jst(t)+")"+
+      (wait.length<rows.length||PICKED.length>1?" for "+wait.map(r=>modelOf(r.id).label).join(", "):""));
+  }
+  return {overdue:late.length>0,text:parts.join(" \u00B7 ")};
 }
 
 async function fetchPoint(w,hs){
@@ -858,6 +888,11 @@ async function getSoundings(){
     "); those columns fall back to vertical shear only.");
   if(notes.length)say(notes.join("  "),true);
   await runP;
+  const nr=nextRunInfo();
+  if(nr){
+    const m=$("#msg"),cur=m.classList.contains("hide")?"":m.textContent;
+    say((cur?cur+"  ":"")+nr.text,nr.overdue||m.classList.contains("err"));
+  }
   const rt=runText();
   $("#modNote").textContent=(rt?rt+" — ":"")+(PICKED.length>1
     ? modelOf(PICKED[0]).label+" drives the readout · "+
@@ -1333,7 +1368,7 @@ function frontBetween(A,B){
    8. route ribbon  — the whole flight in one strip
    ===================================================================== */
 const LAYERS={cloud:true,icing:true,turb:true,cat:false,ri:false,shear:false,turn:false,
-              hshear:false,front:true,tropo:true,pv:true,jet:true};
+              hshear:false,front:true,tropo:true,pv:true,jet:true,plan:true};
 const LAYER_META=[
   ["cloud", "Cloud",  "#6b7a83"],
   ["icing", "Icing",  "#0b6e9c"],
@@ -1346,7 +1381,8 @@ const LAYER_META=[
   ["front", "Front",  "#7b3fa0"],
   ["tropo", "Tropo",  "#5d6a71"],
   ["pv",    "2PVU",   "#2a7f62"],
-  ["jet",   "Jet",    "#a35f00"]
+  ["jet",   "Jet",    "#a35f00"],
+  ["plan",  "Plan \u0394", "#0b6e99"]
 ];
 const catCol=ti=>ti>=TI_SEV?"#b0102a":ti>=TI_MOD?"#d9541e":"#e3a008";
 function drawRibLegend(){
@@ -1361,6 +1397,8 @@ function drawRibLegend(){
   if(on.length)h+=`<b>Lanes (left→right)</b> `+on.map(x=>sw(x[2],.9,x[1])).join("")+
     `<span>pale = light, solid = severe</span>`;
   if(LAYERS.front)h+=sw("#7b3fa0",.5,"front (far right)");
+  if(LAYERS.plan&&PLAN)h+=`<b>Plan \u0394</b> `+sw("#3a9d5d",1,"&lt;10 kt")+sw("#e3a008",1,"10\u201320 kt")+
+    sw("#c0262d",1,"\u226520 kt")+`<span>dots at FL120\u2013450: NAVLOG wind vs model (vector difference)</span>`;
   b.innerHTML=h;
 }
 function drawLayerToggles(){
@@ -1594,6 +1632,21 @@ function drawRibbon(){
     });
   }
 
+  if(LAYERS.plan&&PLAN)ok.forEach((o,k)=>{
+    const cmp=planCompare(o.i);if(!cmp)return;
+    cmp.forEach(c=>{
+      if(c.dv==null)return;
+      const dot=el("circle",{cx:x0(k)+6,cy:Y(c.ft),r:4.4,fill:planCol(c.dv),
+        stroke:"var(--paper)","stroke-width":1.4});
+      const t=el("title");
+      t.textContent="FL"+Math.round(c.ft/100)+"  plan "+String(c.wd).padStart(3,"0")+"\u00B0/"+c.ws+"kt "+
+        (c.t>0?"+":"")+c.t+"\u00B0C  |  model "+String(Math.round(c.mod.wd)).padStart(3,"0")+"\u00B0/"+
+        Math.round(c.mod.ws)+"kt "+c.mod.t.toFixed(0)+"\u00B0C  |  \u0394wind "+c.dv.toFixed(0)+" kt, \u0394T "+
+        (c.dt>0?"+":"")+c.dt.toFixed(1)+"\u00B0C";
+      dot.append(t);s.append(dot);
+    });
+  });
+
   if(LAYERS.jet)ok.forEach((o,k)=>{
     const j=o.p.diag.jet;if(!j)return;
     const r=3+Math.min(j.ws,160)/160*8;
@@ -1759,6 +1812,15 @@ function drawSkewT(pr){
   trace("Td","var(--dewp)");
   trace("T","var(--temp)");
   s.append(gg);
+  // NAVLOG plan temperatures (7 levels) as diamonds, so they sit against the model curve
+  if(PLAN){
+    const cmp=planCompare(PROF.indexOf(pr));
+    if(cmp)cmp.forEach(c=>{
+      const x=X(c.t,c.p),y=Y(c.p),r=5;
+      s.append(el("polygon",{points:`${x},${y-r} ${x+r},${y} ${x},${y+r} ${x-r},${y}`,
+        fill:"#0b6e99",stroke:"var(--paper)","stroke-width":1.2}));
+    });
+  }
 
   // LCL dot
   const lp=pr.diag.lcl;
@@ -1800,6 +1862,10 @@ function drawLegend(pr){
   pr.avail.filter(m=>m!==pr.primary).forEach(mid=>{
     const md=modelOf(mid);h+=item(md.col,`Temp · ${md.label}`);
   });
+  if(PLAN&&planCompare(PROF.indexOf(pr)))
+    h+=`<span><i style="border:0;width:0;height:0;display:inline-block;margin-right:5px;`+
+       `border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #0b6e99"></i>`+
+       `Temp \u00B7 NAVLOG plan</span>`;
   const miss=PICKED.filter(m=>!pr.avail.includes(m));
   if(miss.length)h+=`<span style="color:var(--amber)">no data: `+
     miss.map(m=>modelOf(m).label).join(", ")+`</span>`;
@@ -1855,7 +1921,7 @@ function drawReadout(pr){
   const d=pr.diag,R=[];
   const grp=(lbl,rows)=>R.push(
     `<div class="grp"><div class="lbl">${lbl}</div>`+
-    rows.map(([a,b,w])=>`<div class="row"><b>${a}</b><span class="v${w?" warn":""}">${b}</span></div>`).join("")+
+    rows.map(([a,b,w,st])=>`<div class="row${st?" stack":""}"><b>${a}</b><span class="v${w?" warn":""}">${b}</span></div>`).join("")+
     `</div>`);
 
   grp("Icing layer",[
@@ -1879,7 +1945,7 @@ function drawReadout(pr){
     grp("Turbulence (combined, relative)",
       bl.length
         ?bl.map(b=>[`${SN[b.sev]} FL${Math.round(b.ftLo/100)}\u2013${Math.round(b.ftHi/100)}`,
-            b.why.join(" \u00B7 "),b.sev>=3])
+            b.why.join(" \u00B7 "),b.sev>=3,true])
         :[["","no moderate-or-worse layer"]]);
   }
   // ---- CAT: ranked Ellrod layers + Richardson number ----------------------
@@ -1934,6 +2000,22 @@ function drawReadout(pr){
     ]);
   }
 
+  {
+    const me2=PROF.indexOf(pr),cmp=PLAN?planCompare(me2):null;
+    if(cmp){
+      const row=PLAN.rows[String(WPS[me2].name).toUpperCase()],sh=planShear(row)
+        .sort((a,b)=>b.vws-a.vws)[0];
+      grp("NAVLOG plan vs model"+(PLAN.meta.based?" (FD "+PLAN.meta.based+", ETD "+PLAN.meta.etd+")":""),
+        cmp.filter(c=>c.mod).map(c=>[
+          "FL"+Math.round(c.ft/100)+" \u00B7 \u0394 "+c.dv.toFixed(0)+" kt \u00B7 \u0394T "+(c.dt>0?"+":"")+c.dt.toFixed(1),
+          "plan "+String(c.wd).padStart(3,"0")+"\u00B0/"+c.ws+" "+(c.t>0?"+":"")+c.t+"\u00B0  |  model "+
+            String(Math.round(c.mod.wd)).padStart(3,"0")+"\u00B0/"+Math.round(c.mod.ws)+" "+c.mod.t.toFixed(0)+"\u00B0",
+          c.dv>=PLAN_DV[1]||Math.abs(c.dt)>=PLAN_DT,true]).concat([
+          ["Plan shear (7 levels, coarse)","FL"+Math.round(sh.lo/100)+"\u2013"+Math.round(sh.hi/100)+
+            " \u00B7 "+sh.vws.toFixed(1)+" kt/1000ft"+(PLAN.meta.mxsh!=null?"  \u00B7  dispatch MXSH "+PLAN.meta.mxsh+
+            " at "+PLAN.meta.mxshAt:""),sh.vws>=10,true]]));
+    }
+  }
   grp("Tropopause",[
     ["Thermal",d.trop?`${hpa(d.trop.p)} · ${ft(d.trop.ft)}`:"not resolved"],
     ["2 PVU"+(d.dyn&&d.dyn.approx?" (approx)":""),
@@ -1986,7 +2068,10 @@ function readText(txt){
     let name=null;
     const rest=line.replace(m[0],"").trim();
     const pick=s=>{const q=s&&s.match(NAME_RE);return q&&!COORD_RE.test(s)?q[1]:null;};
-    name=pick(rest)||pick(lines[i+1])||pick(lines[i-1])||("WP"+(out.length+1));
+    // a fix name starts the line: "TT502 N35324E139573 ..." or the line under the coordinates
+    // ("TT502 . 015 FL R"); names such as TT502 or ETP1 contain digits, so match letters+digits
+    const tok=s=>{const q=s&&!COORD_RE.test(s)&&s.trim().match(/^([A-Z][A-Z0-9]{1,5})(?=\s|$)/);return q?q[1]:null;};
+    name=tok(rest)||tok(lines[i+1])||tok(lines[i-1])||pick(rest)||pick(lines[i+1])||pick(lines[i-1])||("WP"+(out.length+1));
     out.push({name,raw,lat,lon,time:null});
   });
   return out;
@@ -2005,14 +2090,29 @@ const DIGIT={O:"0",Q:"0",D:"0",U:"0",I:"1",L:"1","|":"1","!":"1",J:"1",
 const toDigits=t=>t.toUpperCase().split("")
   .map(c=>/[0-9.]/.test(c)?c:(DIGIT[c]||c)).join("");
 
+/* wind-table row: "TT502 2621M04 3025M15 ..." — digit slots coerced, M/P kept */
+const WCODE=/^[0-9OQDILZSGBT|]{4}[MPNW][0-9OQDILZSGBT]{2}$/;
+function fixWindRow(line){
+  const tk=line.trim().split(/\s+/);
+  if(tk.length<4||!/^[A-Z][A-Z0-9]{1,5}$/.test(tk[0]))return null;
+  const codes=tk.slice(1);
+  if(!codes.every(c=>WCODE.test(c)))return null;
+  const fixed=codes.map(c=>toDigits(c.slice(0,4))+(c[4]==="P"?"P":"M")+toDigits(c.slice(5)));
+  return tk[0]+" "+fixed.join(" ");
+}
+
 function ocrFix(text){
   const lines=text.split(/\r?\n/);
   const out=[],coords=[];
+  let winds=0,windLen=null,inWinds=false;
   lines.forEach(line=>{
     const t=line.toUpperCase().replace(/[^A-Z0-9.]/g,"");
     if(!t)return;
     if(/^[-.]{3,}$/.test(t))return;                       // separator rule
-    const m=t.match(/^([NS])(.{4,7})([EW])(.{5,8})$/);
+    // a NAVLOG row starts with the coordinate: "N35324E139573 . 0.04 CLM 025.4 ..."
+    const t0=(line.trim().split(/\s+/)[0]||"").toUpperCase().replace(/[^A-Z0-9.]/g,"");
+    const mA=t.match(/^([NS])(.{4,7})([EW])(.{5,8})$/),m=mA||t0.match(/^([NS])(.{4,7})([EW])(.{5,8})$/),
+          srcTxt=mA?t:t0;
     if(m){
       const la=toDigits(m[2]),lo=toDigits(m[4]);
       const cand=m[1]+la+m[3]+lo;
@@ -2021,12 +2121,24 @@ function ocrFix(text){
         if(a>=-90&&a<=90&&b>=-180&&b<=180){
           coords.push({i:out.length,cand,nla:la.replace(/\D/g,"").length,
                        nlo:lo.replace(/\D/g,"").length,
-                       fixed:cand!==t});
+                       fixed:cand!==srcTxt});
           out.push(cand);return;
         }
       }catch{}
     }
-    out.push(t);
+    // keep ordinary lines as they are (spaces matter: "TT502 . 015 FL R" carries the fix name)
+    const keep=line.toUpperCase().replace(/[^A-Z0-9.\/ \-]/g,"").replace(/\s+/g," ").trim();
+    if(/WINDS\W{0,3}TEMP/.test(keep))inWinds=true;
+    const wr=inWinds?fixWindRow(keep):null;
+    if(wr){
+      winds++;
+      const n=wr.split(" ").length-1;
+      if(windLen==null)windLen=n;
+      out.push(n===windLen?wr:wr+"   <-- CHECK: "+n+" columns, expected "+windLen);
+      return;
+    }
+    // the ETD "Z" is often read as 2: "ETD 1309002" -> "ETD 130900Z"
+    out.push(keep.replace(/(ETD\s+\d{6})2\b/,"$1Z"));
   });
 
   /* A dropped character shortens a coordinate but leaves it parseable, so it
@@ -2047,7 +2159,7 @@ function ocrFix(text){
     });
   }
   const changed=coords.filter(x=>x.fixed).length;
-  return {text:out.join("\n"),n:coords.length,changed,suspect:notes};
+  return {text:out.join("\n"),n:coords.length,changed,suspect:notes,winds};
 }
 
 function loadScript(url){
@@ -2078,7 +2190,7 @@ async function runOCR(file){
         set("reading "+Math.round(m.progress*100)+"%");}
     });
     await worker.setParameters({
-      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.- ",
+      tessedit_char_whitelist:"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-/ ",
       tessedit_pageseg_mode:"6"
     });
     const {data:{text}}=await worker.recognize(file);
@@ -2086,8 +2198,10 @@ async function runOCR(file){
     const r=ocrFix(text);
     $("#textIn").value=r.text;
     set(r.n+" coordinate"+(r.n===1?"":"s")+
+        (r.winds?" \u00B7 "+r.winds+" wind-table row"+(r.winds===1?"":"s"):"")+
         (r.changed?", "+r.changed+" corrected":""));
-    if(!r.n){
+    $("#textBody").classList.remove("hide");$("#textToggle").textContent="Hide";
+    if(!r.n&&!r.winds){
       say("Nothing recognisable was found. A larger, sharper image usually fixes this.",true);
     }else if(r.suspect.length){
       say(r.suspect.length+" line(s) marked CHECK have a different digit count "+
@@ -2203,6 +2317,87 @@ async function pdfText(file){
 const MONTHS={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12};
 
 /* -> {meta,rows,skipped} or null when no NAVLOG table is present */
+/* =====================================================================
+   NAVLOG "WINDS/TEMP ALOFT FCST" table  (dispatch forecast, 7 levels / waypoint)
+   Row:  TT502 2621M04 3025M15 ...   dddss  = wind, M/P + tt = temperature (degC)
+   Wind code: dd = tens of degrees, +50 means speed >= 100 kt (7903 = 290/103).
+   Used only as a second, independent forecast to compare with the model.
+   ===================================================================== */
+let PLAN=null;
+function planWind(code,ft){
+  const m=/^(\d{2})(\d{2})([MP])(\d{2})$/.exec(code);if(!m)return null;
+  let dd=+m[1],ss=+m[2];
+  if(dd>36){dd-=50;ss+=100;}
+  // dispatch writes exactly 100 kt as "dd00" (not dd+50): in the jet levels a 0 kt wind is not real
+  else if(ss===0&&dd>0&&ft>=30000)ss=100;
+  const wd=dd*10===0?360:dd*10;
+  if(wd<10||wd>360)return null;
+  return {wd,ws:ss,t:(m[3]==="M"?-1:1)*+m[4]};
+}
+function parsePlanWinds(text){
+  const t=String(text).replace(/ /g," ");
+  let s=t.search(/WINDS\W{0,3}TEMP\s+ALOFT/i);if(s<0)s=t.search(/FD\s+DATA\s+BASED/i);if(s<0)s=0;
+  const lines=t.slice(s).split(/\r?\n/);
+  let levels=null,rows={},n=0,meta={};
+  const fd=/FD\s+DATA\s+BASED\s+ON\s+(\d{4})UKZ\s+FOR\s+ETD\s+(\d{6})Z/i.exec(t.slice(s,s+800));
+  if(fd)meta={based:fd[1]+"Z",etd:fd[2]+"Z"};
+  for(const ln of lines.slice(1)){
+    const L=ln.trim();if(!L)continue;
+    if(!levels){
+      const nums=L.match(/\b\d{4,5}\b/g);
+      if(nums&&nums.length>=3&&/^[\d\s]+$/.test(L)&&nums.every(x=>+x>=1000&&+x<=60000)){levels=nums.map(Number);}
+      continue;
+    }
+    const m=/^([A-Z][A-Z0-9]{1,5})\s+((?:\d{4}[MP]\d{2}\s*)+)(?:<--.*)?$/.exec(L);
+    if(!m){if(n&&!/CHECK/.test(L))break;else continue;}
+    const codes=m[2].trim().split(/\s+/);
+    if(codes.length!==levels.length)continue;
+    const w=codes.map((c,i)=>{const o=planWind(c,levels[i]);return o&&Object.assign({ft:levels[i]},o);});
+    if(w.some(x=>!x))continue;
+    rows[m[1]]=w;n++;
+  }
+  if(!levels||!n)return null;
+  const mx=/MXSH\s+(\d+)\s*\/\s*([A-Z][A-Z0-9]{1,5})/.exec(t);
+  if(mx){meta.mxsh=+mx[1];meta.mxshAt=mx[2];}
+  return {levels,rows,n,meta};
+}
+const isaP=ft=>ft<=36089.24?1013.25*Math.pow(1-6.8755856e-6*ft,5.255877)
+                           :226.32*Math.exp(-(ft-36089.24)/20805.8);
+/* model value interpolated (in ln p) onto pressure p; wind through u,v components */
+function modelAt(lv,p){
+  let a=null,b=null;
+  for(let i=0;i<lv.length-1;i++)if(lv[i].p>=p&&lv[i+1].p<=p){a=lv[i];b=lv[i+1];break;}
+  if(!a)return null;
+  const f=Math.log(a.p/p)/Math.log(a.p/b.p||1);
+  const ua=uvOf(a.ws,a.wd),ub=uvOf(b.ws,b.wd);
+  const u=ua[0]+f*(ub[0]-ua[0]),v=ua[1]+f*(ub[1]-ua[1]);
+  return {t:a.T+f*(b.T-a.T),ws:Math.hypot(u,v)/KT,wd:(Math.atan2(-u,-v)*180/Math.PI+360)%360,u,v};
+}
+/* per level: plan vs model; dv = length of the wind vector difference (kt) */
+function planCompare(i){
+  if(!PLAN||!PROF[i]||!WPS[i])return null;
+  const row=PLAN.rows[String(WPS[i].name).toUpperCase()];if(!row)return null;
+  const lv=PROF[i].lv;
+  return row.map(r=>{
+    const p=isaP(r.ft),m=modelAt(lv,p);
+    if(!m)return Object.assign({p,mod:null},r);
+    const [pu,pv]=uvOf(r.ws,r.wd);
+    return Object.assign({p,mod:m,
+      dv:Math.hypot(pu-m.u,pv-m.v)/KT,dt:r.t-m.t},r);
+  });
+}
+const PLAN_DV=[10,20],PLAN_DT=3;
+const planCol=dv=>dv>=PLAN_DV[1]?"#c0262d":dv>=PLAN_DV[0]?"#e3a008":"#3a9d5d";
+/* vertical shear of the plan's own 7 levels (coarse: layers are 4000-6000 ft thick) */
+function planShear(row){
+  const out=[];
+  for(let k=0;k<row.length-1;k++){
+    const a=row[k],b=row[k+1],ua=uvOf(a.ws,a.wd),ub=uvOf(b.ws,b.wd);
+    out.push({lo:a.ft,hi:b.ft,vws:Math.hypot(ub[0]-ua[0],ub[1]-ua[1])/KT/((b.ft-a.ft)/1000)});
+  }
+  return out;
+}
+
 function parseNavlog(text){
   const t=String(text).replace(/ /g," ");
   const s=t.search(/TC\s+GS\s+CTME/);
@@ -2233,7 +2428,7 @@ function parseNavlog(text){
   // sanity: elapsed time must never decrease
   for(let i=1;i<rows.length;i++)
     if(rows[i].ctme<rows[i-1].ctme){rows[i].check=true;}
-  return {meta,rows,skipped,nCoord};
+  return {meta,rows,skipped,nCoord,plan:parsePlanWinds(t)};
 }
 
 const hhmm=min=>{min=((Math.round(min)%1440)+1440)%1440;
@@ -2256,7 +2451,7 @@ function thinNav(rows,minNm){
 }
 
 function setNav(nv){
-  NAV=nv;
+  NAV=nv;PLAN=nv.plan||null;
   const m=nv.meta;
   $("#navInfo").textContent=[m.callsign,(m.dep&&m.arr)?m.dep+"-"+m.arr:"",
     m.std!=null?"STD "+hhmm(m.std)+"Z":""].filter(Boolean).join(" · ");
@@ -2286,6 +2481,14 @@ function applyNav(){
 
 async function handle(file){
   if(!file)return;
+  if(/^image\//.test(file.type||"")){                    // screenshot: read it in the browser
+    $("#textBody").classList.remove("hide");$("#textToggle").textContent="Hide";
+    NAV=null;$("#navBar").classList.add("hide");
+    status("READING");
+    await runOCR(file);
+    status(WPS.length?WPS.length+" POINTS":"READY");
+    return;
+  }
   status("READING");say("");
   $("#drop").querySelector("h2").textContent="Reading…";
   try{
@@ -2339,7 +2542,7 @@ $("#clear").onclick=()=>{
   $("#ribbon").innerHTML="";$("#skewt").innerHTML="";$("#readout").innerHTML="";
   ["#wpPanel","#ribPanel","#soundCols"].forEach(x=>$(x).classList.add("hide"));
   $("#textIn").value="";
-  NAV=null;$("#navBar").classList.add("hide");
+  NAV=null;PLAN=null;$("#navBar").classList.add("hide");
   say("");status("READY");
 };
 $("#keyToggle").onclick=()=>{
@@ -2368,16 +2571,33 @@ $("#ocrFile").onchange=e=>{
 $("#textRun").onclick=()=>{
   const nv=parseNavlog($("#textIn").value);
   if(nv&&nv.rows.length>=2){setNav(nv);return;}
+  const pl=parsePlanWinds($("#textIn").value);
+  if(pl&&!readText($("#textIn").value).length){          // winds table only: no coordinates in it
+    PLAN=pl;
+    const hit=WPS.filter(w=>pl.rows[String(w.name).toUpperCase()]).length;
+    say("NAVLOG winds/temps loaded for "+pl.n+" waypoints"+
+      (pl.meta.based?" (FD "+pl.meta.based+" for ETD "+pl.meta.etd+")":"")+". "+
+      (WPS.length?hit+" of the "+WPS.length+" waypoints below match by name."
+                  :"Load the route (NAVLOG PDF or coordinates) too \u2014 waypoints are matched by name."));
+    if(PROF.some(Boolean))rerender(false);
+    return;
+  }
   NAV=null;$("#navBar").classList.add("hide");
   const rows=readText($("#textIn").value);
   if(!rows.length){say("No coordinates found in that text.",true);return;}
+  PLAN=pl||PLAN;                       // coordinates and a winds table pasted together
   WPS=rows.map(r=>({...r,time:"",flags:[]}));
   let prev=null;
   WPS.forEach(w=>{
     if(prev&&nmBetween(prev,[w.lat,w.lon])>2000)w.flags.push("jump");
     prev=[w.lat,w.lon];
   });
-  drawTable();say("");status(WPS.length+" POINTS");
+  drawTable();status(WPS.length+" POINTS");
+  if(PLAN){
+    const hit=WPS.filter(w=>PLAN.rows[String(w.name).toUpperCase()]).length;
+    say("NAVLOG winds/temps: "+hit+" of "+WPS.length+" waypoints matched by name"+
+      (PLAN.meta.based?" (FD "+PLAN.meta.based+", ETD "+PLAN.meta.etd+")":"")+".");
+  }else say("");
 };
 $("#navSpace").onchange=applyNav;
 $("#addRow").onclick=()=>{
