@@ -319,6 +319,7 @@ MJC"
     <span class="spacer"></span>
     <span class="n">CAT / Ri / front / 2PVU are derived from model fields, not forecast products &mdash; CAT is a relative index</span>
   </div>
+  <div class="msg err hide" id="planWarn" style="margin:0;border-radius:0"></div>
   <div class="scrollx"><div id="ribbon"></div></div>
   <div class="legend" id="ribLegend"></div>
 </div>
@@ -921,6 +922,7 @@ function rerender(reset){
   $("#ribNote").textContent=
     `${OFFSET?(OFFSET>0?"+":"")+OFFSET+" h from now":"now"} \u00B7 ${when} \u00B7 ${runText()||"model run time unavailable"}`;
   if(reset||!PROF[SEL])SEL=PROF.findIndex(Boolean);
+  { const pw=$("#planWarn"),w=planCheck();pw.textContent=w;pw.style.whiteSpace="pre-line";pw.classList.toggle("hide",!w); }
   drawRibbon();drawSkewT(PROF[SEL]);drawReadout(PROF[SEL]);
   document.querySelectorAll("#wpTable tbody tr").forEach((tr,k)=>
     tr.classList.toggle("sel",k===SEL));
@@ -1387,18 +1389,28 @@ const LAYER_META=[
 const catCol=ti=>ti>=TI_SEV?"#b0102a":ti>=TI_MOD?"#d9541e":"#e3a008";
 function drawRibLegend(){
   const b=$("#ribLegend");if(!b)return;
-  const sw=(c,o,t)=>`<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:14px;height:10px;background:${c};opacity:${o}"></span>${t}</span>`;
+  const sw=(bg,t,w)=>`<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:${w||16}px;height:11px;background:${bg};border:1px solid rgba(0,0,0,.12)"></span>${t}</span>`;
+  const ln=(c,dash,t)=>`<span style="display:inline-flex;align-items:center;gap:5px"><span style="display:inline-block;width:24px;height:0;border-top:2.6px ${dash} ${c}"></span>${t}</span>`;
+  const br=`<span style="flex-basis:100%;height:0"></span>`;
   let h="";
-  if(LAYERS.turb)h+=`<b>Turb</b> `+sw("#f2c14e",.92,"light")+sw("#e8772e",.92,"moderate")+
-    sw("repeating-linear-gradient(45deg,#c0262d 0 3px,#e8a0a4 3px 5px)",1,"severe")+
-    `<span>worst of CAT index / Ri&lt;0.25 / veer; H-shear, front &amp; 2PVU slope only as support</span>`;
+  const wx=[];
+  if(LAYERS.cloud)wx.push(sw("linear-gradient(90deg,rgba(122,144,161,.2),rgba(122,144,161,.7))","cloud (darker = more cover)",34));
+  if(LAYERS.icing)wx.push(sw("repeating-linear-gradient(135deg,rgba(11,110,156,.65) 0 1px,#fff 1px 5px)","icing zone 0 to −20°C",22));
+  if(LAYERS.tropo)wx.push(ln("#37474f","solid","tropopause (■)"));
+  if(LAYERS.pv)wx.push(ln("#1b8a6b","dashed","2PVU (●)"));
+  if(LAYERS.jet)wx.push(`<span>◯ jet core: → tailwind, ← headwind</span>`);
+  if(wx.length)h+=`<b>WEATHER</b> `+wx.join("");
+  const tb=[];
+  if(LAYERS.turb)tb.push(sw("#f2c14e","light")+sw("#e8772e","moderate")+
+    sw("repeating-linear-gradient(45deg,#c0262d 0 3px,#e8a0a4 3px 5px)","severe")+
+    `<span>= worst of CAT index / Ri&lt;0.25 / veer (H-shear, front, 2PVU slope only support)</span>`);
   const on=[["cat","CAT","#d9541e"],["ri","Ri","#8e1b3a"],["shear","V-shear","#b03a2e"],
     ["turn","Veer","#1f7a8c"],["hshear","H-shear","#9c4a00"]].filter(x=>LAYERS[x[0]]);
-  if(on.length)h+=`<b>Lanes (left→right)</b> `+on.map(x=>sw(x[2],.9,x[1])).join("")+
-    `<span>pale = light, solid = severe</span>`;
-  if(LAYERS.front)h+=sw("#7b3fa0",.5,"front (far right)");
-  if(LAYERS.plan&&PLAN)h+=`<b>Plan \u0394</b> `+sw("#3a9d5d",1,"&lt;10 kt")+sw("#e3a008",1,"10\u201320 kt")+
-    sw("#c0262d",1,"\u226520 kt")+`<span>dots at FL120\u2013450: NAVLOG wind vs model (vector difference)</span>`;
+  if(on.length)tb.push(`<b>lanes (left→right)</b> `+on.map(x=>sw(x[2],x[1])).join("")+`<span>pale = light, solid = severe</span>`);
+  if(LAYERS.front)tb.push(ln("#7b3fa0","solid","front: strongest gradient level"));
+  if(LAYERS.plan&&PLAN)tb.push(`<b>Plan Δ</b> NAVLOG wind vs model `+
+    sw("#3a9d5d","&lt;10 kt")+sw("#e3a008","10–20 kt")+sw("#c0262d","≥20 kt")+`<span>(dots at FL120–450)</span>`);
+  if(tb.length)h+=(h?br:"")+`<b>TURBULENCE</b> `+tb.join("");
   b.innerHTML=h;
 }
 function drawLayerToggles(){
@@ -1418,280 +1430,289 @@ function drawRibbon(){
   const ok=PROF.map((p,i)=>({p,i})).filter(o=>o.p);
   drawRibLegend();
   if(ok.length<1){$("#ribbon").innerHTML="";return;}
-  const L=58,R=18,T=22,B=52,H=600;
-  const W=Math.max(1180,L+R+(ok.length-1)*118);          // wide enough that labels never crowd
-  const pw=W-L-R,ph=H-T-B,maxFt=52000;
-  const X=i=>ok.length===1?L+pw/2:L+i/(ok.length-1)*pw;
-  const Y=ft=>T+ph-Math.min(Math.max(ft,0),maxFt)/maxFt*ph;
-  const colW=ok.length>1?(pw/(ok.length-1))*0.92:pw*0.5;
-  const s=el("svg",{viewBox:`0 0 ${W} ${H}`,role:"img",
-    "aria-label":"Vertical profile along the route"});
-  s.style.minWidth=Math.min(W,1500)+"px";              // pan instead of shrinking the text
-
-  for(let ft=0;ft<=50000;ft+=5000){
-    s.append(el("line",{x1:L,x2:W-R,y1:Y(ft),y2:Y(ft),stroke:ft%10000?"#f0f3f4":"#e2e8ea","stroke-width":1}));
-    const tx=el("text",{x:L-7,y:Y(ft)+3.5,"text-anchor":"end",
-      "font-family":"var(--mono)","font-size":11,fill:"#8c979d"});
-    tx.textContent=ft?"FL"+(ft/100):"SFC";s.append(tx);
-  }
-
-  // cloud straight from the model's pressure-level cover
-  if(LAYERS.cloud)ok.forEach((o,k)=>{
-    const lv=o.p.lv;
-    for(let i=0;i<lv.length;i++){
-      const cc=lv[i].cc;
-      if(cc==null||cc<CLOUD_MIN)continue;
-      const y1=Y(lv[i].ftHi),y2=Y(lv[i].ftLo);
-      s.append(el("rect",{x:X(k)-colW/2,y:y1,width:colW,height:Math.max(y2-y1,1),
-        fill:"#6b7a83",
-        "fill-opacity":(0.10+0.30*(cc-CLOUD_MIN)/(100-CLOUD_MIN)).toFixed(3)}));
-    }
-  });
-
-  /* ---- turbulence ------------------------------------------------------
-     Left lane  : combined score per layer (worst of CAT index, Ri<0.25, veer;
-                  H-shear only supports; one more step when three agree).  Never overlapping.
-     Right lanes: each factor you switch on gets its own thin lane, so the
-                  contributors can be compared side by side instead of stacked.
-     Rightmost  : front strip. */
-  const defs=el("defs");
-  const pat=el("pattern",{id:"catHatch",width:6,height:6,patternUnits:"userSpaceOnUse",
-    patternTransform:"rotate(45)"});
-  pat.append(el("line",{x1:0,y1:0,x2:0,y2:6,stroke:"#fff","stroke-width":2.2,"stroke-opacity":.7}));
-  defs.append(pat);s.append(defs);
-
+  /* Two panels that share the waypoint columns:
+       WEATHER    cloud, icing, tropopause, 2PVU, jet      (shapes in the plot, numbers in the table below)
+       TURBULENCE composite bands, factor lanes, front, plan dots
+     Nothing is lettered inside the plots except one label per turbulence band, so labels can no longer pile up;
+     every number sits in a table row under its own panel, in the column of its waypoint. */
+  const n=ok.length;
+  const L=78,R=78,cw=n===1?380:Math.max(124,Math.min(300,1100/n));
+  const W=L+R+n*cw,PH=340,NAMEH=28,maxFt=46000;
+  const cx=k=>L+(k+0.5)*cw,xa=k=>L+k*cw;
+  const s=el("svg",{viewBox:`0 0 ${W} 10`,role:"img","aria-label":"Vertical profile along the route"});
+  s.style.minWidth=Math.min(W,2400)+"px";
+  const INK="#37474f",SEVC=["","#f2c14e","#e8772e","#c0262d"],SEVN=["","LGT","MOD","SEV"];
+  const SEVT=["","#7a5600","#a84a12","#a01820"];
   const LANES=[["cat","#d9541e"],["ri","#8e1b3a"],["shear","#b03a2e"],["turn","#1f7a8c"],["hshear","#9c4a00"]];
   const lanes=LANES.filter(([k])=>LAYERS[k]);
-  const frontW=LAYERS.front?Math.max(5,colW*0.09):0;
-  const usable=colW-frontW;
-  const compW=LAYERS.turb?(lanes.length?usable*0.6:usable):0;
-  const laneW=lanes.length?(usable-compW)/lanes.length:0;
-  const x0=k=>X(k)-colW/2;
-  const SEVC=["","#f2c14e","#e8772e","#c0262d"],SEVN=["","LGT","MOD","SEV"];
-  const OPA=[0,.4,.7,1];
+  const wantA=LAYERS.cloud||LAYERS.icing||LAYERS.tropo||LAYERS.pv||LAYERS.jet;
+  const wantB=LAYERS.turb||lanes.length||LAYERS.front||(LAYERS.plan&&PLAN);
   const laneSev=(c,key)=>key==="cat"?c.s.cat:key==="shear"?c.s.vws:key==="turn"?c.s.turn:
     key==="hshear"?c.s.hshear:(c.wet?0:(c.ri<RI_CRIT?(c.ri<0?3:2):c.ri<RI_WARN?1:0));
+  const OPA=[0,.4,.7,1];
+  const txt=(x,y,t,o)=>{const e=el("text",Object.assign({x,y,"font-family":"var(--mono)","font-size":11,fill:INK},o||{}));
+    e.textContent=t;return e;};
+  const pts=a=>a.map(q=>q.join(",")).join(" ");
+  const pad3=v=>Math.round(v/100);
 
-  if(LAYERS.turb||lanes.length)ok.forEach((o,k)=>{       // faint column ground: clear air reads as clear
-    s.append(el("rect",{x:x0(k),y:T,width:usable,height:ph,fill:"var(--panel)","fill-opacity":.65}));
-  });
-  ok.forEach((o,k)=>{
-    (o.p.diag.cat||[]).forEach(c=>{
-      const y1=Y(c.ftHi),h=Math.max(Y(c.ftLo)-y1,1);
-      if(compW&&c.sev>0){
-        const r=el("rect",{x:x0(k),y:y1,width:compW,height:h,fill:SEVC[c.sev],"fill-opacity":.92});
-        const t=el("title");
-        t.textContent="FL"+Math.round(c.ftLo/100)+"\u2013"+Math.round(c.ftHi/100)+" "+SEVN[c.sev]+
-          (c.why.length?"\n"+c.why.join(" \u00B7 "):"");
-        r.append(t);s.append(r);
-        if(c.sev>=3)s.append(el("rect",{x:x0(k),y:y1,width:compW,height:h,fill:"url(#catHatch)"}));
-      }
-      lanes.forEach(([key,col],j)=>{
-        const sv=laneSev(c,key);if(!sv)return;
-        s.append(el("rect",{x:x0(k)+compW+j*laneW,y:y1,width:Math.max(laneW-1,2),height:h,
-          fill:col,"fill-opacity":OPA[sv]}));
+  const defs=el("defs");
+  const hatch=(id,col,w,op,gap)=>{
+    const p=el("pattern",{id,width:gap,height:gap,patternUnits:"userSpaceOnUse",patternTransform:"rotate(45)"});
+    p.append(el("line",{x1:0,y1:0,x2:0,y2:gap,stroke:col,"stroke-width":w,"stroke-opacity":op}));defs.append(p);};
+  hatch("catHatch","#fff",2.2,.7,6);
+  hatch("iceHatch","#0b6e9c",1.3,.55,6);
+  s.append(defs);
+
+  let y=8;
+  function panel(title,rows,body){
+    const y0=y,T0=y0+NAMEH;
+    const Y=ft=>T0+PH-Math.min(Math.max(ft,0),maxFt)/maxFt*PH;
+    let ty=T0+PH+8;const rp=rows.map(r=>{const o={r,y:ty};ty+=r.h;return o;});
+    const yEnd=ty+4;
+    s.append(el("rect",{x:L,y:T0,width:n*cw,height:PH,fill:"#fff"}));
+    rp.forEach(({r,y:ry},ri)=>{if(ri%2===0)s.append(el("rect",{x:L,y:ry,width:n*cw,height:r.h,fill:"#f3f6f7"}));});
+    ok.forEach((o,k)=>{if(o.i===SEL)s.append(el("rect",{x:xa(k),y:y0,width:cw,height:yEnd-y0,
+      fill:"var(--route)","fill-opacity":.07}));});
+    for(let ft=0;ft<=45000;ft+=5000){
+      const major=ft%10000===0,lab=ft?"FL"+(ft/100):"SFC";
+      s.append(el("line",{x1:L,x2:W-R,y1:Y(ft),y2:Y(ft),stroke:major?"#cfd8dc":"#e9eef0","stroke-width":major?1.3:1}));
+      [[L-9,"end"],[W-R+9,"start"]].forEach(([x,a])=>s.append(txt(x,Y(ft)+4,lab,
+        {"text-anchor":a,"font-size":major?12.5:10.5,"font-weight":major?700:400,fill:major?"#37474f":"#90a4ae"})));
+    }
+    body(Y,T0);
+    s.append(el("rect",{x:L,y:T0,width:n*cw,height:PH,fill:"none",stroke:"#b0bec5","stroke-width":1}));
+    ok.forEach((o,k)=>{
+      const sel=o.i===SEL;
+      s.append(el("line",Object.assign({x1:cx(k),x2:cx(k),y1:T0,y2:T0+PH,stroke:sel?"var(--route)":"#78909c",
+        "stroke-width":sel?2:1,"stroke-opacity":sel?1:.35},sel?{}:{"stroke-dasharray":"3 4"})));
+      s.append(txt(cx(k),y0+19,o.p.wp.name,{"text-anchor":"middle","font-family":"var(--sans)","font-size":13,
+        "font-weight":sel?700:500,fill:sel?"var(--route)":"var(--ink2)","letter-spacing":".04em"}));
+    });
+    s.append(txt(8,y0+19,title,{"font-family":"var(--sans)","font-size":10,"font-weight":700,
+      "letter-spacing":".08em",fill:"#78909c"}));
+    rp.forEach(({r,y:ry})=>{
+      s.append(txt(L-9,ry+14,r.label,{"text-anchor":"end","font-family":"var(--sans)","font-size":10.5,
+        "font-weight":700,"letter-spacing":".05em",fill:r.col}));
+      ok.forEach((o,k)=>{
+        r.cell(o,k).forEach((l,li)=>{
+          const t=typeof l==="string"?{t:l}:l;
+          s.append(txt(cx(k),ry+14+li*13,t.t,{"text-anchor":"middle","font-weight":li?400:600,fill:t.c||r.col}));
+        });
       });
     });
-  });
-
-  // frontal zone: horizontal temperature gradient between adjacent points
-  const fronts=[],fronts2=[];
-  // 2D: gradient magnitude around the waypoint, independent of the route heading
-  if(LAYERS.front)ok.forEach((o,k)=>{
-    const d=o.p.diag;if(!d.d2)return;
-    d.fr2.forEach(h=>{
-      if(h.grad<FRONT_MIN)return;
-      const f=Math.min(1,(h.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN));
-      // own strip at the far right of the column, never over the turbulence lanes
-      s.append(el("rect",{x:x0(k)+usable,y:Y(h.ftHi),width:frontW,
-        height:Math.max(Y(h.ftLo)-Y(h.ftHi),1),fill:"#7b3fa0",
-        "fill-opacity":(0.14+f*0.42).toFixed(3)}));
+    ok.forEach((o,k)=>{
+      const g=el("g",{style:"cursor:pointer"});
+      g.append(el("rect",{x:xa(k),y:y0,width:cw,height:yEnd-y0,fill:"transparent"}));
+      g.addEventListener("click",()=>select(o.i));s.append(g);
     });
-    if(d.front2)fronts2.push({k,pk:d.front2});
-  });
-  // along-route fallback for legs where neither end has 2D data
-  if(LAYERS.front)for(let k=0;k<ok.length-1;k++){
-    if(ok[k].p.diag.d2||ok[k+1].p.diag.d2)continue;
-    const fr=frontBetween(ok[k].p,ok[k+1].p);
-    if(!fr)continue;
-    fronts.push({k,fr});
-    fr.hits.forEach(h=>{
-      if(h.grad<FRONT_MIN)return;
-      const f=Math.min(1,(h.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN));
-      s.append(el("line",{x1:X(k),x2:X(k+1),y1:Y(h.yA),y2:Y(h.yB),
-        stroke:"#7b3fa0","stroke-width":(1.5+f*7).toFixed(1),
-        "stroke-opacity":(0.14+f*0.42).toFixed(3)}));
+    y=yEnd+18;
+  }
+
+  /* ---------------- WEATHER ---------------- */
+  if(wantA){
+    const rows=[];
+    if(LAYERS.jet)rows.push({label:"JET",col:"#8a5200",h:34,cell:o=>{
+      const j=o.p.diag.jet;if(!j)return [{t:"–",c:"#90a4ae"}];
+      const tr=trackAtIdx(o.i);let tw="";
+      if(tr!=null){const t=j.ws*Math.cos((j.wd+180-tr)*Math.PI/180);tw="  "+(t>=0?"TW ":"HW ")+Math.round(Math.abs(t));}
+      return ["FL"+pad3(j.ft)+" "+Math.round(j.ws)+"kt",
+        String(Math.round(j.wd)).padStart(3,"0")+"°"+tw];}});
+    if(LAYERS.tropo)rows.push({label:"TROPO",col:INK,h:22,cell:o=>{
+      const t=o.p.diag.trop;return [t?"FL"+pad3(t.ft):{t:"–",c:"#90a4ae"}];}});
+    if(LAYERS.pv)rows.push({label:"2PVU",col:"#1b7a5f",h:22,cell:o=>{
+      const t=o.p.diag.dyn;return [t?"FL"+pad3(t.ft)+(t.approx?"~":""):{t:"–",c:"#90a4ae"}];}});
+    if(LAYERS.cloud)rows.push({label:"CLOUD",col:"#4b6575",h:34,cell:o=>{
+      const c=(o.p.diag.cloud||[]).slice().sort((a,b)=>a.base-b.base);
+      if(!c.length)return [{t:"clear",c:"#90a4ae"}];
+      const out=c.slice(0,2).map(x=>"FL"+pad3(x.base)+"–"+pad3(x.top));
+      if(c.length>2)out[1]+="+"+(c.length-2);
+      return out;}});
+    if(LAYERS.icing)rows.push({label:"ICING",col:"#0b6e9c",h:22,cell:o=>{
+      const d=o.p.diag;return [d.ft0!=null&&d.ftM20!=null?"FL"+pad3(d.ft0)+"–"+pad3(d.ftM20):{t:"–",c:"#90a4ae"}];}});
+    panel("WEATHER",rows,(Y)=>{
+      if(LAYERS.cloud)ok.forEach((o,k)=>{
+        o.p.lv.forEach(v=>{
+          const cc=v.cc;if(cc==null||cc<CLOUD_MIN)return;
+          const y1=Y(v.ftHi),y2=Y(v.ftLo);
+          s.append(el("rect",{x:xa(k)-.4,y:y1,width:cw+.8,height:Math.max(y2-y1,1),fill:"#7a90a1",
+            "fill-opacity":(0.18+0.5*(cc-CLOUD_MIN)/(100-CLOUD_MIN)).toFixed(3)}));
+        });
+      });
+      if(LAYERS.icing){
+        const p=ok.map((o,k)=>{const d=o.p.diag;return d.ft0!=null&&d.ftM20!=null?{k,a:d.ft0,b:d.ftM20}:null;}).filter(Boolean);
+        if(p.length){
+          const bot=p.map(q=>[cx(q.k),Y(q.a)]),top=p.map(q=>[cx(q.k),Y(q.b)]);
+          bot.unshift([L,bot[0][1]]);top.unshift([L,top[0][1]]);
+          bot.push([W-R,bot[bot.length-1][1]]);top.push([W-R,top[top.length-1][1]]);
+          s.append(el("polygon",{points:pts(bot.concat(top.slice().reverse())),fill:"url(#iceHatch)"}));
+          s.append(el("polyline",{points:pts(bot),fill:"none",stroke:"var(--ice)","stroke-width":1.6,"stroke-opacity":.85}));
+          s.append(el("polyline",{points:pts(top),fill:"none",stroke:"var(--ice)","stroke-width":1.6,
+            "stroke-opacity":.85,"stroke-dasharray":"6 4"}));
+        }
+      }
+      const track=(a,col,dash)=>{
+        if(a.length>1){
+          s.append(el("polyline",{points:pts(a),fill:"none",stroke:"#fff","stroke-width":5.5,"stroke-opacity":.85,"stroke-linejoin":"round"}));
+          s.append(el("polyline",Object.assign({points:pts(a),fill:"none",stroke:col,"stroke-width":2.2,"stroke-linejoin":"round"},
+            dash?{"stroke-dasharray":dash}:{})));
+        }
+      };
+      if(LAYERS.tropo){
+        const a=ok.map((o,k)=>o.p.diag.trop?[cx(k),Y(o.p.diag.trop.ft)]:null).filter(Boolean);
+        track(a,INK);
+        a.forEach(q=>s.append(el("rect",{x:q[0]-3.5,y:q[1]-3.5,width:7,height:7,fill:INK,stroke:"#fff","stroke-width":1.2})));
+      }
+      if(LAYERS.pv){
+        const a=ok.map((o,k)=>o.p.diag.dyn?[cx(k),Y(o.p.diag.dyn.ft)]:null).filter(Boolean);
+        track(a,"#1b8a6b","6 4");
+        a.forEach(q=>s.append(el("circle",{cx:q[0],cy:q[1],r:4,fill:"#1b8a6b",stroke:"#fff","stroke-width":1.2})));
+      }
+      if(LAYERS.jet){
+        const a=ok.map((o,k)=>o.p.diag.jet?[cx(k),Y(o.p.diag.jet.ft)]:null).filter(Boolean);
+        if(a.length>1)s.append(el("polyline",{points:pts(a),fill:"none",stroke:"#d08a10","stroke-width":2.2,
+          "stroke-opacity":.6,"stroke-dasharray":"1 5","stroke-linecap":"round"}));
+        ok.forEach((o,k)=>{
+          const j=o.p.diag.jet;if(!j)return;
+          const x=cx(k),yy=Y(j.ft);
+          s.append(el("circle",{cx:x,cy:yy,r:12,fill:"#fff7e6",stroke:"var(--amber)","stroke-width":2}));
+          const tr=trackAtIdx(o.i);if(tr==null)return;
+          const t=j.ws*Math.cos((j.wd+180-tr)*Math.PI/180),d=t>=0?1:-1,weak=Math.abs(t)<0.3*j.ws;
+          const g=el("g",{stroke:"#8a5200","stroke-width":2,"stroke-linecap":"round","stroke-linejoin":"round",fill:"none",
+            "stroke-opacity":weak?.35:1});
+          g.append(el("line",{x1:x-d*7,x2:x+d*7,y1:yy,y2:yy}));
+          g.append(el("polyline",{points:`${x+d*3},${yy-4} ${x+d*7},${yy} ${x+d*3},${yy+4}`}));
+          s.append(g);
+        });
+      }
     });
   }
 
-  if(LAYERS.icing){
-    const top=[],bot=[];
-    ok.forEach((o,k)=>{const d=o.p.diag;
-      if(d.ft0!=null&&d.ftM20!=null){bot.push([X(k),Y(d.ft0)]);top.push([X(k),Y(d.ftM20)]);}});
-    if(bot.length>1){
-      const pts=bot.concat(top.reverse()).map(q=>q.join(",")).join(" ");
-      s.append(el("polygon",{points:pts,fill:"var(--ice)","fill-opacity":.13,
-        stroke:"var(--ice)","stroke-opacity":.5,"stroke-width":1}));
-    }
-  }
-
-  /* ---- label placement ---------------------------------------------------
-     Every label is queued, then placed highest priority first.  A label that
-     would overlap one already placed (or a jet symbol) slides up/down to the
-     nearest free spot; if none exists it is dropped (the Readout still has it). */
-  const FS=11,LH=12.5;
-  const Q=[],OB=[];
-  const tw=(t,w)=>t.length*FS*(w>=600?0.64:0.6)+4;
-  // lines: [[text,colour,weight,dy],...]; y = baseline of dy=0
-  const put=(x,y,lines,pri,opt)=>Q.push(Object.assign({x,y,lines,pri},opt||{}));
-  const lbl=(x,y,txt,col,w,pri)=>put(x,y,[[txt,col,w||400,0]],pri==null?3:pri);
-  const flushLabels=()=>{
-    const hit=(a,b)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
-    const STEPS=[0];for(let d=4;d<=70;d+=4){STEPS.push(d,-d);}
-    const tryPlace=(g)=>{
-      const w=Math.max.apply(null,g.lines.map(l=>tw(l[0],l[2])));
-      const t0=Math.min.apply(null,g.lines.map(l=>l[3]))-FS+1,b0=Math.max.apply(null,g.lines.map(l=>l[3]))+3;
-      const x=Math.min(Math.max(g.x,L+w/2),W-R-w/2);
-      const steps=g.inY?(()=>{const out=[0],m=(g.inY[1]-g.inY[0])/2;
-        for(let d=3;d<=m;d+=3)out.push(d,-d);return out;})():STEPS;
-      for(const sh of steps){
-        const y=g.y+sh,bx={x1:x-w/2,x2:x+w/2,y1:y+t0,y2:y+b0};
-        if(bx.y1<T-6||bx.y2>T+ph+6)continue;
-        if(g.inY&&(bx.y1<g.inY[0]-1||bx.y2>g.inY[1]+1))continue;
-        if(OB.some(o=>hit(o,bx)))continue;
-        OB.push(bx);
-        g.lines.forEach(([txt,col,wt,dy])=>{
-          [{fill:"none",stroke:"var(--paper)","stroke-width":3.2,"stroke-linejoin":"round"},{fill:col}]
-          .forEach(extra=>{
-            const t=el("text",Object.assign({x,y:y+dy,"text-anchor":"middle",
-              "font-family":"var(--mono)","font-size":FS,"font-weight":wt||400,
-              "pointer-events":"none"},extra));
-            t.textContent=txt;s.append(t);
+  /* ---------------- TURBULENCE ---------------- */
+  if(wantB){
+    const rows=[];
+    if(LAYERS.front)rows.push({label:"FRONT",col:"#7b3fa0",h:34,cell:(o,k)=>{
+      const d=o.p.diag,pk=d.front2;
+      if(pk){const cr=coldRel(pk.cold,trackAtIdx(o.i));
+        return ["FL"+pad3(pk.ft)+" "+pk.grad.toFixed(1)+"°/100nm",
+          cr?"cold "+cr.txt:"cold "+String(Math.round(pk.cold)).padStart(3,"0")+"°"];}
+      if(!d.d2&&k<ok.length-1&&!ok[k+1].p.diag.d2){
+        const fr=frontBetween(o.p,ok[k+1].p);
+        if(fr&&fr.peak&&fr.peak.grad>=FRONT_MIN)return ["FL"+pad3(fr.peak.ft)+" "+fr.peak.grad.toFixed(1)+"°","(to next)"];
+      }
+      return [{t:"–",c:"#90a4ae"}];}});
+    if(LAYERS.turb)rows.push({label:"TURB",col:"#a84a12",h:22,cell:o=>{
+      const bl=(o.p.diag.turbBlocks||[]).filter(b=>b.ftHi>=25000&&b.ftLo<=45000);
+      if(!bl.length)return [{t:"clear",c:"#90a4ae"}];
+      bl.sort((a,b)=>b.sev-a.sev||(b.ftHi-b.ftLo)-(a.ftHi-a.ftLo));
+      const b=bl[0];
+      return [{t:SEVN[b.sev]+" FL"+pad3(Math.max(b.ftLo,25000))+"–"+pad3(Math.min(b.ftHi,45000))+(bl.length>1?"+":""),c:SEVT[b.sev]}];}});
+    panel("TURBULENCE",rows,(Y,T0)=>{
+      const compW=lanes.length?cw*0.5:cw,laneW=lanes.length?(cw*0.5-4)/lanes.length:0;
+      const FS=11,LH=12.5,Q=[],OB=[];
+      const tw=(t,w)=>t.length*FS*(w>=600?0.64:0.6)+4;
+      const put=(x,yy,lines,pri,opt)=>Q.push(Object.assign({x,y:yy,lines,pri},opt||{}));
+      ok.forEach((o,k)=>{
+        const xs=lanes.length?xa(k)+2:xa(k)-.4,w=lanes.length?compW-2:cw+.8;
+        if(LAYERS.turb)(o.p.diag.turbBlocks||[]).forEach(b=>{
+          const y1=Y(b.ftHi),h=Math.max(Y(b.ftLo)-y1,1);
+          const r=el("rect",{x:xs,y:y1,width:w,height:h,fill:SEVC[b.sev]});
+          const t=el("title");
+          t.textContent="FL"+pad3(b.ftLo)+"–"+pad3(b.ftHi)+" "+SEVN[b.sev]+(b.why.length?"\n"+b.why.join(" · "):"");
+          r.append(t);s.append(r);
+          if(b.sev>=3)s.append(el("rect",{x:xs,y:y1,width:w,height:h,fill:"url(#catHatch)"}));
+        });
+        if(lanes.length)(o.p.diag.cat||[]).forEach(c=>{
+          const y1=Y(c.ftHi),h=Math.max(Y(c.ftLo)-y1,1);
+          lanes.forEach(([key,col],j)=>{
+            const sv=laneSev(c,key);if(!sv)return;
+            s.append(el("rect",{x:xa(k)+compW+j*laneW,y:y1,width:Math.max(laneW-1,2),height:h,fill:col,"fill-opacity":OPA[sv]}));
           });
         });
-        return true;
+      });
+      // one label per turbulence band, even when the band runs over several waypoints
+      if(LAYERS.turb){
+        const runs=[];let open=[];
+        ok.forEach((o,k)=>{
+          const nopen=[];
+          (o.p.diag.turbBlocks||[]).forEach(b=>{
+            const r=open.find(q=>!q.taken&&q.sev===b.sev&&b.ftLo<q.last.ftHi&&b.ftHi>q.last.ftLo);
+            if(r){r.taken=true;r.k1=k;r.lo=Math.min(r.lo,b.ftLo);r.hi=Math.max(r.hi,b.ftHi);r.last=b;
+              if(b.ftHi-b.ftLo>r.big.ftHi-r.big.ftLo)r.big=b;nopen.push(r);}
+            else{const q={sev:b.sev,k0:k,k1:k,lo:b.ftLo,hi:b.ftHi,last:b,big:b,taken:true};runs.push(q);nopen.push(q);}
+          });
+          open=nopen;open.forEach(q=>{q.taken=false;});
+        });
+        runs.forEach(q=>{
+          if(q.big.ftLo>=maxFt-500)return;
+          const top=Y(q.big.ftHi),bot=Y(q.big.ftLo),hgt=bot-top;
+          const cxm=(xa(q.k0)+xa(q.k1)+(lanes.length?compW:cw))/2;
+          const col=q.sev>=3?"#7a1016":"#3d1c04";
+          const fl="FL"+pad3(q.lo)+"–"+pad3(Math.min(q.hi,maxFt));
+          const two=[[SEVN[q.sev],col,700,0],[fl,col,600,LH]],one=[[SEVN[q.sev]+" "+fl,col,600,0]];
+          const cy=(top+bot)/2;
+          if(hgt>=2*LH+4)put(cxm,cy-LH/2+4,two,8,{inY:[top,bot],alt:one});
+          else if(hgt>=LH+3)put(cxm,cy+4,one,8,{inY:[top,bot]});
+        });
       }
-      return false;
-    };
-    Q.sort((a,b)=>b.pri-a.pri);
-    Q.forEach(g=>{if(!tryPlace(g)&&g.alt)tryPlace(Object.assign({},g,{lines:g.alt,alt:null}));});
-  };
-
-  // label every turbulence block with its level range (kept inside the block)
-  if(compW>=34)ok.forEach((o,k)=>{
-    (o.p.diag.turbBlocks||[]).forEach(b=>{
-      const top=Y(b.ftHi),bot=Y(b.ftLo),hgt=bot-top;
-      const cy=(top+bot)/2,cx=x0(k)+compW/2,col=b.sev>=3?"#7a1016":"#3d1c04";
-      const fl="FL"+Math.round(b.ftLo/100)+"\u2013"+Math.round(b.ftHi/100);
-      const two=[[SEVN[b.sev],col,700,0],[fl,col,600,LH]],one=[[fl,col,600,0]];
-      if(hgt>=2*LH+4)put(cx,cy-LH/2+4,two,8,{inY:[top,bot],alt:one});
-      else if(hgt>=LH+3)put(cx,cy+4,one,8,{inY:[top,bot]});
-    });
-  });
-
-  // frontal surface: mark and label the level of strongest gradient
-  fronts.forEach(({k,fr})=>{
-    const xm=(X(k)+X(k+1))/2,ym=Y(fr.peak.ft);
-    s.append(el("line",{x1:xm-9,x2:xm+9,y1:ym,y2:ym,
-      stroke:"#7b3fa0","stroke-width":2.4,"stroke-linecap":"round"}));
-    put(xm,ym-7,[["FL"+Math.round(fr.peak.ft/100),"#7b3fa0",700,0],
-      [fr.peak.grad.toFixed(1)+"\u00B0/100nm","#7b3fa0",400,LH]],9);
-  });
-
-  // 2D frontal peak: level, strength and the bearing towards the cold air
-  fronts2.forEach(({k,pk})=>{
-    const x=X(k),ym=Y(pk.ft);
-    const xl=Math.min(Math.max(x,L+34),W-R-34);      // keep the text inside the plot
-    s.append(el("line",{x1:x0(k)+usable-2,x2:x0(k)+colW,y1:ym,y2:ym,
-      stroke:"#7b3fa0","stroke-width":2.6,"stroke-linecap":"round"}));
-    const cr=coldRel(pk.cold,trackAtIdx(ok[k].i));
-    put(xl,ym-3-LH,[["FL"+Math.round(pk.ft/100),"#7b3fa0",700,0],
-      [pk.grad.toFixed(1)+"°/100nm","#7b3fa0",700,LH],
-      [cr?"cold "+cr.txt:"cold "+String(Math.round(pk.cold)).padStart(3,"0")+"°","#7b3fa0",600,2*LH]],9);
-  });
-
-  // dynamic tropopause (2 PVU) — dotted, so it reads against the thermal one
-  if(LAYERS.pv){
-    const dp=ok.map((o,k)=>o.p.diag.dyn?[X(k),Y(o.p.diag.dyn.ft)]:null).filter(Boolean);
-    if(dp.length>1)s.append(el("polyline",{points:dp.map(q=>q.join(",")).join(" "),
-      fill:"none",stroke:"#2a7f62","stroke-width":1.8,"stroke-dasharray":"2 4",
-      "stroke-linecap":"round"}));
-    ok.forEach((o,k)=>{
-      const dy=o.p.diag.dyn;
-      if(dy)lbl(X(k),Y(dy.ft)+12,"FL"+Math.round(dy.ft/100)+(dy.approx?"~":""),"#2a7f62",400,5);
-    });
-  }
-
-  if(LAYERS.tropo){
-    const tp=ok.map((o,k)=>o.p.diag.trop?[X(k),Y(o.p.diag.trop.ft)]:null).filter(Boolean);
-    if(tp.length>1)s.append(el("polyline",{points:tp.map(q=>q.join(",")).join(" "),
-      fill:"none",stroke:"var(--ink2)","stroke-width":1.6,"stroke-dasharray":"7 4"}));
-    ok.forEach((o,k)=>{
-      const tr=o.p.diag.trop;
-      if(tr)lbl(X(k),Y(tr.ft)-6,"FL"+Math.round(tr.ft/100),"var(--ink2)",400,5);
+      if(LAYERS.front){
+        const bar=(x1,x2,yy,f)=>{
+          [["#fff",7.5],["#7b3fa0",3+f*3]].forEach(([c,wd])=>s.append(el("line",{x1,x2,y1:yy,y2:yy,stroke:c,"stroke-width":wd,"stroke-linecap":"round"})));
+          OB.push({x1,x2,y1:yy-6,y2:yy+6});
+        };
+        ok.forEach((o,k)=>{const pk=o.p.diag.front2;if(!pk)return;
+          bar(cx(k)-cw*.32,cx(k)+cw*.32,Y(pk.ft),Math.min(1,(pk.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN)));});
+        for(let k=0;k<ok.length-1;k++){
+          if(ok[k].p.diag.d2||ok[k+1].p.diag.d2)continue;
+          const fr=frontBetween(ok[k].p,ok[k+1].p);if(!fr||!fr.peak||fr.peak.grad<FRONT_MIN)continue;
+          const xm=(cx(k)+cx(k+1))/2;
+          bar(xm-cw*.3,xm+cw*.3,Y(fr.peak.ft),Math.min(1,(fr.peak.grad-FRONT_MIN)/(FRONT_STRONG-FRONT_MIN)));
+        }
+      }
+      if(LAYERS.plan&&PLAN)ok.forEach((o,k)=>{
+        const cmp=planCompare(o.i);if(!cmp)return;
+        cmp.forEach(c=>{
+          if(c.dv==null)return;
+          const dot=el("circle",{cx:cx(k),cy:Y(c.ft),r:5.2,fill:planCol(c.dv),stroke:"#fff","stroke-width":2});
+          const t=el("title");
+          t.textContent="FL"+pad3(c.ft)+"  plan "+String(c.wd).padStart(3,"0")+"°/"+c.ws+"kt "+
+            (c.t>0?"+":"")+c.t+"°C  |  model "+String(Math.round(c.mod.wd)).padStart(3,"0")+"°/"+
+            Math.round(c.mod.ws)+"kt "+c.mod.t.toFixed(0)+"°C  |  Δwind "+c.dv.toFixed(0)+" kt, ΔT "+
+            (c.dt>0?"+":"")+c.dt.toFixed(1)+"°C";
+          dot.append(t);s.append(dot);
+          OB.push({x1:cx(k)-7,x2:cx(k)+7,y1:Y(c.ft)-7,y2:Y(c.ft)+7});
+        });
+      });
+      // label placement: highest priority first, slide to the nearest free spot, drop if none
+      const hit=(a,b)=>a.x1<b.x2&&a.x2>b.x1&&a.y1<b.y2&&a.y2>b.y1;
+      const tryPlace=g=>{
+        const w=Math.max.apply(null,g.lines.map(l=>tw(l[0],l[2])));
+        const t0=Math.min.apply(null,g.lines.map(l=>l[3]))-FS+1,b0=Math.max.apply(null,g.lines.map(l=>l[3]))+3;
+        const x=Math.min(Math.max(g.x,L+w/2),W-R-w/2);
+        const steps=[0];const m=g.inY?(g.inY[1]-g.inY[0])/2:70;
+        for(let d=3;d<=m;d+=3)steps.push(d,-d);
+        for(const sh of steps){
+          const yy=g.y+sh,bx={x1:x-w/2,x2:x+w/2,y1:yy+t0,y2:yy+b0};
+          if(bx.y1<T0-2||bx.y2>T0+PH+2)continue;
+          if(g.inY&&(bx.y1<g.inY[0]-1||bx.y2>g.inY[1]+1))continue;
+          if(OB.some(o=>hit(o,bx)))continue;
+          OB.push(bx);
+          g.lines.forEach(([t,col,wt,dy])=>{
+            [{fill:"none",stroke:"#fff","stroke-width":3.2,"stroke-linejoin":"round"},{fill:col}].forEach(extra=>{
+              const e=txt(x,yy+dy,t,Object.assign({"text-anchor":"middle","font-weight":wt||400,"pointer-events":"none"},extra));
+              s.append(e);});
+          });
+          return true;
+        }
+        return false;
+      };
+      Q.sort((a,b)=>b.pri-a.pri);
+      Q.forEach(g=>{if(!tryPlace(g)&&g.alt)tryPlace(Object.assign({},g,{lines:g.alt,alt:null}));});
     });
   }
-
-  if(LAYERS.plan&&PLAN)ok.forEach((o,k)=>{
-    const cmp=planCompare(o.i);if(!cmp)return;
-    cmp.forEach(c=>{
-      if(c.dv==null)return;
-      const dot=el("circle",{cx:x0(k)+6,cy:Y(c.ft),r:4.4,fill:planCol(c.dv),
-        stroke:"var(--paper)","stroke-width":1.4});
-      const t=el("title");
-      t.textContent="FL"+Math.round(c.ft/100)+"  plan "+String(c.wd).padStart(3,"0")+"\u00B0/"+c.ws+"kt "+
-        (c.t>0?"+":"")+c.t+"\u00B0C  |  model "+String(Math.round(c.mod.wd)).padStart(3,"0")+"\u00B0/"+
-        Math.round(c.mod.ws)+"kt "+c.mod.t.toFixed(0)+"\u00B0C  |  \u0394wind "+c.dv.toFixed(0)+" kt, \u0394T "+
-        (c.dt>0?"+":"")+c.dt.toFixed(1)+"\u00B0C";
-      dot.append(t);s.append(dot);
-    });
-  });
-
-  if(LAYERS.jet)ok.forEach((o,k)=>{
-    const j=o.p.diag.jet;if(!j)return;
-    const r=3+Math.min(j.ws,160)/160*8;
-    s.append(el("circle",{cx:X(k),cy:Y(j.ft),r,fill:"var(--amber)","fill-opacity":.2,
-      stroke:"var(--amber)","stroke-width":1.3}));
-    const th=(j.wd+180)*Math.PI/180,len=15;
-    const dx=Math.sin(th),dy=-Math.cos(th);
-    const x0=X(k)-dx*(r+2),y0=Y(j.ft)-dy*(r+2);
-    const x1=x0+dx*len,y1=y0+dy*len;
-    s.append(el("line",{x1:x0,y1:y0,x2:x1,y2:y1,stroke:"var(--amber)",
-      "stroke-width":1.6,"stroke-linecap":"round"}));
-    const ah=4.5,pa=th+Math.PI*0.82,pb=th-Math.PI*0.82;
-    s.append(el("polyline",{fill:"none",stroke:"var(--amber)","stroke-width":1.6,
-      "stroke-linecap":"round",points:
-        `${x1+Math.sin(pa)*ah},${y1-Math.cos(pa)*ah} ${x1},${y1} `+
-        `${x1+Math.sin(pb)*ah},${y1-Math.cos(pb)*ah}`}));
-    OB.push({x1:X(k)-r-17,x2:X(k)+r+17,y1:Y(j.ft)-r-17,y2:Y(j.ft)+r+17});   // symbol + arrow
-    lbl(X(k),Y(j.ft)-r-21,String(Math.round(j.wd)).padStart(3,"0")+"\u00B0/"+
-        Math.round(j.ws)+"kt","var(--amber)",600,10);
-    lbl(X(k),Y(j.ft)+r+19,"FL"+Math.round(j.ft/100),"var(--amber)",400,6);
-  });
-
-  ok.forEach((o,k)=>{
-    const sel=o.i===SEL;
-    s.append(el("line",{x1:X(k),x2:X(k),y1:T,y2:T+ph,
-      stroke:sel?"var(--route)":"#cfd8dc","stroke-width":sel?2:1,
-      "stroke-opacity":sel?1:.55}));
-    const g=el("g",{style:"cursor:pointer"});
-    g.append(el("rect",{x:X(k)-26,y:T,width:52,height:ph,fill:"transparent"}));
-    g.addEventListener("click",()=>select(o.i));
-    s.append(g);
-    if(LAYERS.cloud&&o.p.diag.cloud&&o.p.diag.cloud.length){
-      const c=o.p.diag.cloud;
-      const base=Math.min(...c.map(x=>x.base)),top=Math.max(...c.map(x=>x.top));
-      lbl(X(k),Y(top)-5,"FL"+Math.round(top/100),"#3f4f58",400,4);
-      lbl(X(k),Y(base)+11,"FL"+Math.round(base/100),"#3f4f58",400,4);
-    }
-    const t=el("text",{x:X(k),y:H-26,"text-anchor":"middle",
-      "font-family":"var(--sans)","font-size":13,
-      "font-weight":sel?700:500,fill:sel?"var(--route)":"var(--ink2)",
-      "letter-spacing":".04em"});
-    t.textContent=o.p.wp.name;s.append(t);
-  });
-
-  flushLabels();
+  if(!wantA&&!wantB){
+    s.append(txt(L,40,"Switch on a layer above.",{"font-size":13,fill:"var(--ink2)"}));y=70;
+  }
+  s.setAttribute("viewBox",`0 0 ${W} ${y}`);
   $("#ribbon").innerHTML="";$("#ribbon").append(s);
 }
 
@@ -2388,6 +2409,36 @@ function planCompare(i){
 }
 const PLAN_DV=[10,20],PLAN_DT=3;
 const planCol=dv=>dv>=PLAN_DV[1]?"#c0262d":dv>=PLAN_DV[0]?"#e3a008":"#3a9d5d";
+/* sanity check: is this plan table plausibly for the same time / same weather as the model on screen?
+   (a table from another day or a mis-read table makes everything red — say so instead of letting it be read as weather) */
+function planCheck(){
+  if(!PLAN)return "";
+  const out=[];
+  const t0=(PROF.find(Boolean)||{}).time||"";
+  const e=/^(\d{2})(\d{2})(\d{2})Z$/.exec((PLAN.meta&&PLAN.meta.etd)||"");
+  if(e&&t0){
+    const v=Date.parse(t0.slice(0,16)+":00Z"),d=new Date(v);let best=null;
+    for(const dm of [-1,0,1]){
+      const c=Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+dm,+e[1],+e[2],+e[3]);
+      if(new Date(c).getUTCDate()!==+e[1])continue;
+      if(best==null||Math.abs(c-v)<Math.abs(best-v))best=c;
+    }
+    if(best!=null){
+      const h=(v-best)/3600e3;
+      if(Math.abs(h)>9)out.push("NAVLOGの風表はETD "+e[1]+"日"+e[2]+":"+e[3]+"Z用ですが、いま表示しているモデル時刻は "+
+        t0.slice(8,10)+"日"+t0.slice(11,16)+"Z（ETDから "+(h>0?"+":"")+h.toFixed(0)+" h）。右上の時刻ボタンでフライト時刻に合わせてください。");
+    }
+  }
+  let n=0,red=0,sdt=0;
+  PROF.forEach((p,i)=>{const c=planCompare(i);if(!c)return;
+    c.forEach(x=>{if(x.dv==null)return;n++;if(x.dv>=PLAN_DV[1])red++;sdt+=Math.abs(x.dt);});});
+  if(n>=10){
+    const rf=red/n,mt=sdt/n;
+    if(rf>=0.6||mt>8)out.push("NAVLOGとモデルが全体的に大きく違います（赤 "+Math.round(rf*100)+"%、気温差平均 "+mt.toFixed(0)+"℃）。"+
+      "別の日・別ルートの表、または読み取りミスの可能性が高いです。天気の差としては読まないでください。");
+  }
+  return out.join("\n");
+}
 /* vertical shear of the plan's own 7 levels (coarse: layers are 4000-6000 ft thick) */
 function planShear(row){
   const out=[];
